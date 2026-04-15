@@ -43,3 +43,15 @@ test-only:
 	go test -v -count=1 ./...
 
 test: test-only lint vuln-check diff
+
+# ==============================================================================
+# Examples
+
+example-basic:
+	go run ./examples/basic/
+
+example-chat:
+	go run ./examples/chat/
+
+example-toolcall:
+	go run ./examples/toolcall/
