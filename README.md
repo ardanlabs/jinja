@@ -2,7 +2,7 @@
 
 A pure-Go Jinja template engine purpose-built for rendering LLM chat templates. It compiles and executes the Jinja templates embedded in GGUF model files, turning conversations and tool definitions into the exact token sequences each model expects. Zero dependencies, zero CGO.
 
-Copyright 2025-2026 Ardan Labs
+Copyright 2026 Ardan Labs
 
 hello@ardanlabs.com
 
