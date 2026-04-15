@@ -1,3 +1,3 @@
 module github.com/ardanlabs/jinja
 
-go 1.26.2
+go 1.26.0
