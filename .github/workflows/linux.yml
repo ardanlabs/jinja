@@ -1,0 +1,32 @@
+name: Linux
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "stable"
+      - name: Install static analysis tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run api/service tests
+        timeout-minutes: 30
+        run: |
+          go test -v -count=1 ./...
+      - name: Run vet, linter, vuln, diff checks
+        run: |
+          go vet ./...
+          staticcheck -checks=all ./...
+          govulncheck ./...
+          go fix -diff ./...
