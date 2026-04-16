@@ -1,16 +1,23 @@
+{{- bos_token -}}
+{%- set keep_past_thinking = keep_past_thinking | default(false) -%}
 {%- set ns = namespace(system_prompt="") -%}
 {%- if messages[0]["role"] == "system" -%}
-    {%- set ns.system_prompt = messages[0]["content"] -%}
+    {%- set sys_content = messages[0]["content"] -%}
+    {%- if sys_content is not string -%}
+        {%- for item in sys_content -%}
+            {%- if item["type"] == "text" -%}
+                {%- set ns.system_prompt = ns.system_prompt + item["text"] -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- else -%}
+        {%- set ns.system_prompt = sys_content -%}
+    {%- endif -%}
     {%- set messages = messages[1:] -%}
 {%- endif -%}
 {%- if tools -%}
-    {%- if ns.system_prompt -%}
-        {%- set ns.system_prompt = ns.system_prompt + "\nList of tools: [" -%}
-    {%- else -%}
-        {%- set ns.system_prompt = "List of tools: [" -%}
-    {%- endif -%}
+    {%- set ns.system_prompt = ns.system_prompt + ("\n" if ns.system_prompt else "") + "List of tools: [" -%}
     {%- for tool in tools -%}
-        {%- if not tool is string -%}
+        {%- if tool is not string -%}
             {%- set tool = tool | tojson -%}
         {%- endif -%}
         {%- set ns.system_prompt = ns.system_prompt + tool -%}
@@ -23,12 +30,17 @@
 {%- if ns.system_prompt -%}
     {{- "<|im_start|>system\n" + ns.system_prompt + "<|im_end|>\n" -}}
 {%- endif -%}
+{%- set ns.last_assistant_index = -1 -%}
+{%- for message in messages -%}
+    {%- if message["role"] == "assistant" -%}
+        {%- set ns.last_assistant_index = loop.index0 -%}
+    {%- endif -%}
+{%- endfor -%}
 {%- for message in messages -%}
     {{- "<|im_start|>" + message["role"] + "\n" -}}
-    {%- set content = message["content"] -%}
-    {%- if not content is string -%}
+    {%- if message["content"] is not string -%}
         {%- set ns.content = "" -%}
-        {%- for item in content -%}
+        {%- for item in message["content"] -%}
             {%- if item["type"] == "image" -%}
                 {%- set ns.content = ns.content + "<image>" -%}
             {%- elif item["type"] == "text" -%}
@@ -38,6 +50,13 @@
             {%- endif -%}
         {%- endfor -%}
         {%- set content = ns.content -%}
+    {%- else -%}
+        {%- set content = message["content"] -%}
+    {%- endif -%}
+    {%- if message["role"] == "assistant" and not keep_past_thinking and loop.index0 != ns.last_assistant_index -%}
+        {%- if "</think>" in content -%}
+            {%- set content = content.split("</think>")[-1] | trim -%}
+        {%- endif -%}
     {%- endif -%}
     {{- content + "<|im_end|>\n" -}}
 {%- endfor -%}
