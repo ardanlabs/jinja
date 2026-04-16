@@ -53,9 +53,8 @@ func render(nodes []node, data map[string]Value) (string, error) {
 		output: strings.Builder{},
 	}
 
-	// Create builtins scope as root.
-	e.builtins = newScope(nil)
-	registerBuiltins(e.builtins)
+	// Clone the cached builtins scope.
+	e.builtins = cloneBuiltins()
 
 	// Create user data scope on top of builtins.
 	e.scope = newScope(e.builtins)

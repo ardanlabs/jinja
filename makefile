@@ -44,6 +44,9 @@ test-only:
 
 test: test-only lint vuln-check diff
 
+bench:
+	go test -bench=. -benchmem -count=1 -benchtime=3s
+
 # ==============================================================================
 # Examples
 
