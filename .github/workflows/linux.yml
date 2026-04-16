@@ -16,10 +16,6 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "stable"
-      - name: Install static analysis tools
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run api/service tests
         timeout-minutes: 30
         run: |
@@ -27,6 +23,6 @@ jobs:
       - name: Run vet, linter, vuln, diff checks
         run: |
           go vet ./...
-          staticcheck -checks=all ./...
-          govulncheck ./...
+          go tool staticcheck -checks=all ./...
+          go tool govulncheck ./...
           go fix -diff ./...
