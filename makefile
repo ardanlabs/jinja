@@ -9,13 +9,6 @@ else
 endif
 
 # ==============================================================================
-# Install
-
-install-gotooling:
-	go install honnef.co/go/tools/cmd/staticcheck@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-
-# ==============================================================================
 # Go Modules support
 
 tidy:
@@ -30,10 +23,10 @@ deps-upgrade: bui-upgrade
 
 lint:
 	go vet ./...
-	staticcheck -checks=all ./...
+	go tool staticcheck -checks=all ./...
 
 vuln-check:
-	govulncheck ./...
+	go tool govulncheck ./...
 
 diff:
 	go fix -diff ./...
