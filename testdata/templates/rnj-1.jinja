@@ -1,0 +1,75 @@
+{#- Essential AI rnj-1 chat template (Llama-3 format, gonja compatible) -#}
+{%- set base_system = 'You are rnj-1, a foundation model trained by Essential AI.\n' -%}
+{%- set default_system = 'You are a helpful assistant.' -%}
+{%- set has_user_system = (messages and messages[0].role == 'system' and (messages[0].content is string)) -%}
+{%- set effective_system = (has_user_system and messages[0].content) or default_system -%}
+{#- ---------- System message ---------- -#}
+{%- if tools -%}
+{{- bos_token -}}
+{{- '<|start_header_id|>system<|end_header_id|>\n' ~ base_system ~ '\n' ~ effective_system -}}
+{{- '\n\n# Tools\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>' -}}
+{%- for tool in tools -%}
+{{- '\n' ~ (tool | tojson) ~ '\n' -}}
+{%- endfor -%}
+{{- '</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{"name": <function-name>, "arguments": <args-json-object>}\n</tool_call>' -}}
+{{- '<|eot_id|>' -}}
+{%- else -%}
+{{- bos_token -}}
+{{- '<|start_header_id|>system<|end_header_id|>\n' ~ base_system ~ '\n' ~ effective_system ~ '<|eot_id|>' -}}
+{%- endif -%}
+{#- ---------- Walk all messages ---------- -#}
+{%- for message in messages -%}
+{%- if message.content is string -%}
+{%- set content = message.content -%}
+{%- else -%}
+{%- set content = '' -%}
+{%- endif -%}
+{#- Skip the first system message (already embedded above) -#}
+{%- if loop.first and message.role == "system" -%}
+{#- no-op -#}
+{%- elif (message.role == "user") or (message.role == "system") -%}
+{{- '<|start_header_id|>' ~ message.role ~ '<|end_header_id|>\n' ~ content ~ '<|eot_id|>' -}}
+{%- elif message.role == "assistant" -%}
+{{- '<|start_header_id|>assistant<|end_header_id|>\n' -}}
+{{- content -}}
+{%- if message.tool_calls -%}
+{%- for tool_call in message.tool_calls -%}
+{%- if tool_call.function -%}
+{%- set tc = tool_call.function -%}
+{%- else -%}
+{%- set tc = tool_call -%}
+{%- endif -%}
+{%- if tc.arguments is string -%}
+{%- set args_json = tc.arguments -%}
+{%- else -%}
+{%- set args_json = tc.arguments | tojson -%}
+{%- endif -%}
+{%- if loop.first -%}
+{{- '<tool_call>\n{"name": "' ~ tc.name ~ '", "arguments": ' ~ args_json ~ '}\n</tool_call>' -}}
+{%- else -%}
+{{- '\n<tool_call>\n{"name": "' ~ tc.name ~ '", "arguments": ' ~ args_json ~ '}\n</tool_call>' -}}
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
+{{- '<|eot_id|>' -}}
+{%- elif message.role == "tool" -%}
+{%- set open_user = (loop.first or (messages[loop.index0 - 1].role != "tool")) -%}
+{%- set close_user = (loop.last or (messages[loop.index0 + 1].role != "tool")) -%}
+{%- if open_user -%}
+{{- '<|start_header_id|>user<|end_header_id|>\n' -}}
+{%- endif -%}
+{%- if open_user -%}
+{{- '<tool_response>\n' -}}
+{%- else -%}
+{{- '\n<tool_response>\n' -}}
+{%- endif -%}
+{{- content -}}
+{{- '\n</tool_response>' -}}
+{%- if close_user -%}
+{{- '<|eot_id|>' -}}
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+{{- '<|start_header_id|>assistant<|end_header_id|>\n' -}}
+{%- endif -%}

@@ -1,0 +1,46 @@
+{%- set ns = namespace(system_prompt="") -%}
+{%- if messages[0]["role"] == "system" -%}
+    {%- set ns.system_prompt = messages[0]["content"] -%}
+    {%- set messages = messages[1:] -%}
+{%- endif -%}
+{%- if tools -%}
+    {%- if ns.system_prompt -%}
+        {%- set ns.system_prompt = ns.system_prompt + "\nList of tools: [" -%}
+    {%- else -%}
+        {%- set ns.system_prompt = "List of tools: [" -%}
+    {%- endif -%}
+    {%- for tool in tools -%}
+        {%- if not tool is string -%}
+            {%- set tool = tool | tojson -%}
+        {%- endif -%}
+        {%- set ns.system_prompt = ns.system_prompt + tool -%}
+        {%- if not loop.last -%}
+            {%- set ns.system_prompt = ns.system_prompt + ", " -%}
+        {%- endif -%}
+    {%- endfor -%}
+    {%- set ns.system_prompt = ns.system_prompt + "]" -%}
+{%- endif -%}
+{%- if ns.system_prompt -%}
+    {{- "<|im_start|>system\n" + ns.system_prompt + "<|im_end|>\n" -}}
+{%- endif -%}
+{%- for message in messages -%}
+    {{- "<|im_start|>" + message["role"] + "\n" -}}
+    {%- set content = message["content"] -%}
+    {%- if not content is string -%}
+        {%- set ns.content = "" -%}
+        {%- for item in content -%}
+            {%- if item["type"] == "image" -%}
+                {%- set ns.content = ns.content + "<image>" -%}
+            {%- elif item["type"] == "text" -%}
+                {%- set ns.content = ns.content + item["text"] -%}
+            {%- else -%}
+                {%- set ns.content = ns.content + item | tojson -%}
+            {%- endif -%}
+        {%- endfor -%}
+        {%- set content = ns.content -%}
+    {%- endif -%}
+    {{- content + "<|im_end|>\n" -}}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+    {{- "<|im_start|>assistant\n" -}}
+{%- endif -%}
