@@ -22,7 +22,7 @@ type scope struct {
 }
 
 func newScope(parent *scope) *scope {
-	return &scope{vars: make(map[string]Value), parent: parent}
+	return &scope{vars: make(map[string]Value, 4), parent: parent}
 }
 
 func (s *scope) get(name string) (Value, bool) {
@@ -173,9 +173,16 @@ func (e *evaluator) execFor(n *forNode) error {
 
 	total := int64(len(items))
 
-	for i, item := range items {
-		child := newScope(e.scope)
+	// Pre-allocate the loop dict and child scope once, then reuse them
+	// across iterations to avoid per-iteration allocations.
+	loop := NewDict()
+	ld := loop.AsDict()
+	ld.Set("length", NewInt(total))
 
+	child := newScope(e.scope)
+	child.set("loop", loop)
+
+	for i, item := range items {
 		// Set loop variable(s).
 		if n.keyVar != "" {
 			// Destructuring: for key, val in items
@@ -190,38 +197,34 @@ func (e *evaluator) execFor(n *forNode) error {
 			child.set(n.valVar, item)
 		}
 
-		// Build loop object.
-		loop := NewDict()
-		ld := loop.AsDict()
+		// Update loop object for this iteration.
 		idx := int64(i)
-		ld.Set("index", NewInt(idx+1))
-		ld.Set("index0", NewInt(idx))
-		ld.Set("revindex", NewInt(total-idx))
-		ld.Set("revindex0", NewInt(total-idx-1))
-		ld.Set("first", NewBool(i == 0))
-		ld.Set("last", NewBool(i == len(items)-1))
-		ld.Set("length", NewInt(total))
+		ld.Data["index"] = NewInt(idx + 1)
+		ld.Data["index0"] = NewInt(idx)
+		ld.Data["revindex"] = NewInt(total - idx)
+		ld.Data["revindex0"] = NewInt(total - idx - 1)
+		ld.Data["first"] = NewBool(i == 0)
+		ld.Data["last"] = NewBool(i == len(items)-1)
 
 		if i > 0 {
-			ld.Set("previtem", items[i-1])
+			ld.Data["previtem"] = items[i-1]
 		} else {
-			ld.Set("previtem", Undefined())
+			ld.Data["previtem"] = Undefined()
 		}
 		if i < len(items)-1 {
-			ld.Set("nextitem", items[i+1])
+			ld.Data["nextitem"] = items[i+1]
 		} else {
-			ld.Set("nextitem", Undefined())
+			ld.Data["nextitem"] = Undefined()
 		}
 
-		// cycle function
-		ld.Set("cycle", NewCallable("loop.cycle", func(args []Value, kwargs map[string]Value) (Value, error) {
+		// cycle function — capture idx by value for closure correctness.
+		cycleIdx := idx
+		ld.Data["cycle"] = NewCallable("loop.cycle", func(args []Value, kwargs map[string]Value) (Value, error) {
 			if len(args) == 0 {
 				return Undefined(), nil
 			}
-			return args[int(idx)%len(args)], nil
-		}))
-
-		child.set("loop", loop)
+			return args[int(cycleIdx)%len(args)], nil
+		})
 
 		old := e.scope
 		e.scope = child
@@ -790,22 +793,25 @@ func (e *evaluator) evalCallExpr(n *callExpr) (Value, error) {
 		return Undefined(), fmt.Errorf("value is not callable: %s", fn.String())
 	}
 
-	var args []Value
-	for _, a := range n.args {
+	args := make([]Value, len(n.args))
+	for i, a := range n.args {
 		v, err := e.evalExpr(a)
 		if err != nil {
 			return Undefined(), err
 		}
-		args = append(args, v)
+		args[i] = v
 	}
 
-	kwargs := make(map[string]Value)
-	for _, kw := range n.kwargs {
-		v, err := e.evalExpr(kw.value)
-		if err != nil {
-			return Undefined(), err
+	var kwargs map[string]Value
+	if len(n.kwargs) > 0 {
+		kwargs = make(map[string]Value, len(n.kwargs))
+		for _, kw := range n.kwargs {
+			v, err := e.evalExpr(kw.value)
+			if err != nil {
+				return Undefined(), err
+			}
+			kwargs[kw.name] = v
 		}
-		kwargs[kw.name] = v
 	}
 
 	return fn.AsCallable().Fn(args, kwargs)
@@ -832,22 +838,26 @@ func (e *evaluator) evalFilter(n *filterExpr) (Value, error) {
 	}
 
 	// Build args: input as first, then additional args.
-	args := []Value{input}
-	for _, a := range n.args {
+	args := make([]Value, 1+len(n.args))
+	args[0] = input
+	for i, a := range n.args {
 		v, err := e.evalExpr(a)
 		if err != nil {
 			return Undefined(), err
 		}
-		args = append(args, v)
+		args[i+1] = v
 	}
 
-	kwargs := make(map[string]Value)
-	for _, kw := range n.kwargs {
-		v, err := e.evalExpr(kw.value)
-		if err != nil {
-			return Undefined(), err
+	var kwargs map[string]Value
+	if len(n.kwargs) > 0 {
+		kwargs = make(map[string]Value, len(n.kwargs))
+		for _, kw := range n.kwargs {
+			v, err := e.evalExpr(kw.value)
+			if err != nil {
+				return Undefined(), err
+			}
+			kwargs[kw.name] = v
 		}
-		kwargs[kw.name] = v
 	}
 
 	return filterVal.AsCallable().Fn(args, kwargs)

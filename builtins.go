@@ -3,6 +3,7 @@ package jinja
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"strings"
@@ -10,11 +11,26 @@ import (
 	"unicode"
 )
 
-// registerBuiltins populates scope s with all built-in globals, filters, and
-// test helpers needed by LLM chat templates.
-func registerBuiltins(s *scope) {
+// cachedBuiltins is a read-only scope populated once with all built-in
+// globals and filters. Each render clones it cheaply via cloneScope.
+var cachedBuiltins = func() *scope {
+	s := newScope(nil)
 	registerGlobals(s)
 	registerFilters(s)
+	return s
+}()
+
+// cloneBuiltins returns a shallow copy of the cached builtins scope so
+// each render gets its own scope without re-registering every function.
+func cloneBuiltins() *scope {
+	return cloneScope(cachedBuiltins)
+}
+
+// cloneScope creates a shallow copy of a scope (same parent, copied vars map).
+func cloneScope(s *scope) *scope {
+	vars := make(map[string]Value, len(s.vars))
+	maps.Copy(vars, s.vars)
+	return &scope{vars: vars, parent: s.parent}
 }
 
 // =============================================================================
