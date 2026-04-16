@@ -3,7 +3,6 @@ package jinja_test
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -303,18 +302,6 @@ func TestLoopVariables(t *testing.T) {
 // =============================================================================
 // Chat template render tests with simple messages
 // =============================================================================
-
-func chatTemplate(t *testing.T, name string) string {
-	t.Helper()
-
-	fileName := path.Join("testdata", "templates", name+".jinja")
-	data, err := os.ReadFile(fileName)
-	if err != nil {
-		t.Fatalf("%q: read - %v", fileName, err)
-	}
-
-	return string(data)
-}
 
 func TestRender_Qwen3_8B_SimpleChat(t *testing.T) {
 	template := chatTemplates["Qwen3-8B-Q8_0"]
