@@ -895,19 +895,9 @@ func TestDictGet(t *testing.T) {
 }
 
 func TestRegression(t *testing.T) {
-	files, err := filepath.Glob("testdata/templates/*.jinja")
-	if err != nil {
-		t.Fatalf("can't read testdata/templates - %v", err)
-	}
-
-	for _, name := range files {
+	for name, content := range chatTemplates {
 		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(name)
-			if err != nil {
-				t.Fatalf("read - %v", err)
-			}
-
-			_, err = jinja.Compile(string(data))
+			_, err := jinja.Compile(content)
 			if err != nil {
 				t.Fatalf("compile - %v", err)
 			}
