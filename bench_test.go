@@ -93,6 +93,33 @@ func BenchmarkRender_Qwen3(b *testing.B) {
 }
 
 // =============================================================================
+// Chat template benchmarks – Qwen3.6 (hybrid model used by kronk benchmarks)
+// =============================================================================
+
+func BenchmarkCompile_Qwen36(b *testing.B) {
+	source := chatTemplates["Qwen3.6-35B-A3B-UD-Q4_K_M"]
+	for b.Loop() {
+		if _, err := jinja.Compile(source); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRender_Qwen36(b *testing.B) {
+	tmpl, err := jinja.Compile(chatTemplates["Qwen3.6-35B-A3B-UD-Q4_K_M"])
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for b.Loop() {
+		if _, err := tmpl.Render(chatBenchData); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// =============================================================================
 // Complex template benchmarks – Gemma4 multi-turn tool calling (heaviest)
 // =============================================================================
 

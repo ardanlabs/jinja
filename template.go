@@ -53,8 +53,12 @@ func render(nodes []node, data map[string]Value) (string, error) {
 		output: strings.Builder{},
 	}
 
-	// Clone the cached builtins scope.
-	e.builtins = cloneBuiltins()
+	// Use the cached builtins scope directly. The scope is initialized
+	// once at package init and is only read after that (lookupFilter,
+	// chained get() through parent links, passed to nested evaluators).
+	// No code path writes to e.builtins, so sharing the cached scope
+	// across renders is safe and avoids cloning ~20 entries per render.
+	e.builtins = cachedBuiltins
 
 	// Create user data scope on top of builtins.
 	e.scope = newScope(e.builtins)

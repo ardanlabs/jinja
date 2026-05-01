@@ -589,18 +589,50 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 
 	if obj.IsList() {
 		list := obj.AsList()
-		start, stop, step := resolveSlice(n, e, list.Len())
+		length := list.Len()
+		start, stop, step := resolveSlice(n, e, length)
+
+		// Fast path for the overwhelmingly common step==1 case
+		// (e.g. messages[1:] in chat templates). A single allocation
+		// of the exact size avoids the geometric growth of append.
+		// Aliasing the source slice would be unsafe because List.Append
+		// could later mutate beyond Len() into the backing array.
+		if step == 1 {
+			if start < 0 {
+				start = 0
+			}
+			if stop > length {
+				stop = length
+			}
+			if start >= stop {
+				return NewList(nil), nil
+			}
+			items := make([]Value, stop-start)
+			copy(items, list.Items[start:stop])
+			return NewList(items), nil
+		}
+
 		var items []Value
 		if step > 0 {
+			// Pre-size to the maximum possible iteration count to
+			// avoid append's geometric growth allocations.
+			count := (stop - start + step - 1) / step
+			if count > 0 {
+				items = make([]Value, 0, count)
+			}
 			for i := start; i < stop; i += step {
-				if i >= 0 && i < list.Len() {
-					items = append(items, list.Get(i))
+				if i >= 0 && i < length {
+					items = append(items, list.Items[i])
 				}
 			}
 		} else if step < 0 {
+			count := (start - stop - step - 1) / -step
+			if count > 0 {
+				items = make([]Value, 0, count)
+			}
 			for i := start; i > stop; i += step {
-				if i >= 0 && i < list.Len() {
-					items = append(items, list.Get(i))
+				if i >= 0 && i < length {
+					items = append(items, list.Items[i])
 				}
 			}
 		}
@@ -608,7 +640,50 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 	}
 
 	if obj.IsString() {
-		runes := []rune(obj.AsString())
+		s := obj.AsString()
+
+		// ASCII fast path. Most chat-template string slicing operates
+		// on tag/role names or message content that is ASCII; for those
+		// we can index by byte and skip the []rune conversion entirely.
+		// This is the dominant cost in the kronk dense profile because
+		// the system prompt can be tens of thousands of bytes.
+		if isASCII(s) {
+			length := len(s)
+			start, stop, step := resolveSlice(n, e, length)
+
+			if step == 1 {
+				if start < 0 {
+					start = 0
+				}
+				if stop > length {
+					stop = length
+				}
+				if start >= stop {
+					return NewString(""), nil
+				}
+				return NewString(s[start:stop]), nil
+			}
+
+			if step == -1 {
+				if start >= length {
+					start = length - 1
+				}
+				if stop < -1 {
+					stop = -1
+				}
+				if start <= stop {
+					return NewString(""), nil
+				}
+				buf := make([]byte, 0, start-stop)
+				for i := start; i > stop; i-- {
+					buf = append(buf, s[i])
+				}
+				return NewString(string(buf)), nil
+			}
+			// Fall through to the general path for unusual steps.
+		}
+
+		runes := []rune(s)
 		length := len(runes)
 		start, stop, step := resolveSlice(n, e, length)
 		var result []rune
@@ -629,6 +704,18 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 	}
 
 	return Undefined(), nil
+}
+
+// isASCII reports whether s contains only 7-bit ASCII bytes. Used to
+// skip the []rune conversion in evalSlice's string branch when byte
+// indexing produces the same result as code-point indexing.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
 
 func resolveSlice(n *sliceExpr, e *evaluator, length int) (int, int, int) {
