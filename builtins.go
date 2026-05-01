@@ -3,35 +3,25 @@ package jinja
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 )
 
 // cachedBuiltins is a read-only scope populated once with all built-in
-// globals and filters. Each render clones it cheaply via cloneScope.
+// globals and filters. It is shared across every render — no code path
+// writes to the builtins scope (only chained reads through parent
+// links and lookupFilter), so a single shared instance is safe and
+// avoids ~20 allocations per render.
 var cachedBuiltins = func() *scope {
 	s := newScope(nil)
 	registerGlobals(s)
 	registerFilters(s)
 	return s
 }()
-
-// cloneBuiltins returns a shallow copy of the cached builtins scope so
-// each render gets its own scope without re-registering every function.
-func cloneBuiltins() *scope {
-	return cloneScope(cachedBuiltins)
-}
-
-// cloneScope creates a shallow copy of a scope (same parent, copied vars map).
-func cloneScope(s *scope) *scope {
-	vars := make(map[string]Value, len(s.vars))
-	maps.Copy(vars, s.vars)
-	return &scope{vars: vars, parent: s.parent}
-}
 
 // =============================================================================
 // Global functions
@@ -353,25 +343,105 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 
-	goVal := valueToGo(args[0])
-
-	var data []byte
-	var err error
-
+	// The indented form is used rarely in chat templates; fall back to
+	// the reflection-based encoder for correctness instead of duplicating
+	// indent state in the direct encoder.
 	if indent, ok := kwargs["indent"]; ok && !indent.IsNone() && !indent.IsUndefined() {
 		n := int(toInt64(indent))
-		prefix := ""
-		indentStr := strings.Repeat(" ", n)
-		data, err = json.MarshalIndent(goVal, prefix, indentStr)
-	} else {
-		data, err = json.Marshal(goVal)
+		data, err := json.MarshalIndent(valueToGo(args[0]), "", strings.Repeat(" ", n))
+		if err != nil {
+			return NewString(""), nil
+		}
+		return NewString(string(data)), nil
 	}
 
-	if err != nil {
+	// Direct Value-tree encoder. Bypasses valueToGo's intermediate
+	// map[string]any/[]any allocations and json.Marshal's reflection
+	// path. Per-render allocations drop from ~80 (Dict.Set + valueToGo
+	// + reflect) to a handful (one strings.Builder grow + one Marshal
+	// per leaf string for escaping).
+	var sb strings.Builder
+	if err := encodeValueJSON(&sb, args[0]); err != nil {
 		return NewString(""), nil
 	}
+	return NewString(sb.String()), nil
+}
 
-	return NewString(string(data)), nil
+// encodeValueJSON writes the JSON encoding of v directly into sb without
+// going through an intermediate Go-typed tree. Strings are delegated to
+// encoding/json so escaping rules match the standard library exactly.
+func encodeValueJSON(sb *strings.Builder, v Value) error {
+	switch v.kind {
+	case KindUndefined, KindNone, KindCallable:
+		sb.WriteString("null")
+		return nil
+
+	case KindBool:
+		if v.AsBool() {
+			sb.WriteString("true")
+		} else {
+			sb.WriteString("false")
+		}
+		return nil
+
+	case KindInt:
+		var buf [20]byte
+		sb.Write(strconv.AppendInt(buf[:0], v.AsInt(), 10))
+		return nil
+
+	case KindFloat:
+		f := v.AsFloat()
+		if math.IsInf(f, 0) || math.IsNaN(f) {
+			return fmt.Errorf("tojson: cannot encode %v", f)
+		}
+		var buf [32]byte
+		sb.Write(strconv.AppendFloat(buf[:0], f, 'g', -1, 64))
+		return nil
+
+	case KindString:
+		data, err := json.Marshal(v.AsString())
+		if err != nil {
+			return err
+		}
+		sb.Write(data)
+		return nil
+
+	case KindList:
+		sb.WriteByte('[')
+		for i, item := range v.AsList().Items {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			if err := encodeValueJSON(sb, item); err != nil {
+				return err
+			}
+		}
+		sb.WriteByte(']')
+		return nil
+
+	case KindDict:
+		sb.WriteByte('{')
+		d := v.AsDict()
+		for i, key := range d.Keys {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+			data, err := json.Marshal(key)
+			if err != nil {
+				return err
+			}
+			sb.Write(data)
+			sb.WriteByte(':')
+			if err := encodeValueJSON(sb, d.Data[key]); err != nil {
+				return err
+			}
+		}
+		sb.WriteByte('}')
+		return nil
+	}
+
+	sb.WriteString("null")
+	return nil
 }
 
 func filterFromjson(args []Value, kwargs map[string]Value) (Value, error) {
