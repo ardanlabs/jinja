@@ -109,7 +109,8 @@ func scan(source string) ([]segment, error) {
 			ch := source[i]
 
 			// Handle quoted strings so that closers inside them are ignored.
-			if ch == '\'' || ch == '"' {
+			// Comments are raw text until #}, so don't treat quotes specially there.
+			if kind != segComment && (ch == '\'' || ch == '"') {
 				quote := ch
 				if ch == '\n' {
 					line++
