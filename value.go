@@ -3,6 +3,7 @@
 package jinja
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -370,6 +371,24 @@ func FromGoValue(v any) Value {
 
 	case float64:
 		return NewFloat(val)
+
+	case json.Number:
+		// json.Number preserves whether the source JSON used a decimal
+		// point or exponent. Integers (no '.', 'e', 'E') become Int so
+		// that downstream tojson emits them as integers — matching
+		// Python json.dumps, which keeps int and float distinct. Without
+		// this, a value like 9007199254740991 round-trips as
+		// 9.007199254740991e+15 and breaks chat-template tokenization.
+		s := string(val)
+		if !strings.ContainsAny(s, ".eE") {
+			if i, err := val.Int64(); err == nil {
+				return NewInt(i)
+			}
+		}
+		if f, err := val.Float64(); err == nil {
+			return NewFloat(f)
+		}
+		return NewString(s)
 
 	case string:
 		return NewString(val)

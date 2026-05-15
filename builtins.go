@@ -1,6 +1,7 @@
 package jinja
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -368,8 +369,19 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 // encodeValueJSON writes the JSON encoding of v directly into sb without
-// going through an intermediate Go-typed tree. Strings are delegated to
-// encoding/json so escaping rules match the standard library exactly.
+// going through an intermediate Go-typed tree.
+//
+// The output matches Python json.dumps's defaults so that prompts rendered by
+// this engine are byte-for-byte identical to those produced by HuggingFace's
+// reference Jinja2 implementation:
+//
+//   - Item separator is ", " (with a trailing space), key/value separator is
+//     ": " — Python's default when no indent is given.
+//   - HTML metacharacters '&', '<', '>' are NOT escaped to \u0026 / \u003c /
+//     \u003e (Go's encoding/json escapes these by default; Python does not).
+//
+// Both differences would otherwise change the tokenization of every tool
+// definition that ends up in a chat prompt.
 func encodeValueJSON(sb *strings.Builder, v Value) error {
 	switch v.kind {
 	case KindUndefined, KindNone, KindCallable:
@@ -399,18 +411,13 @@ func encodeValueJSON(sb *strings.Builder, v Value) error {
 		return nil
 
 	case KindString:
-		data, err := json.Marshal(v.AsString())
-		if err != nil {
-			return err
-		}
-		sb.Write(data)
-		return nil
+		return encodeJSONString(sb, v.AsString())
 
 	case KindList:
 		sb.WriteByte('[')
 		for i, item := range v.AsList().Items {
 			if i > 0 {
-				sb.WriteByte(',')
+				sb.WriteString(", ")
 			}
 			if err := encodeValueJSON(sb, item); err != nil {
 				return err
@@ -424,14 +431,12 @@ func encodeValueJSON(sb *strings.Builder, v Value) error {
 		d := v.AsDict()
 		for i, key := range d.Keys {
 			if i > 0 {
-				sb.WriteByte(',')
+				sb.WriteString(", ")
 			}
-			data, err := json.Marshal(key)
-			if err != nil {
+			if err := encodeJSONString(sb, key); err != nil {
 				return err
 			}
-			sb.Write(data)
-			sb.WriteByte(':')
+			sb.WriteString(": ")
 			if err := encodeValueJSON(sb, d.Data[key]); err != nil {
 				return err
 			}
@@ -441,6 +446,24 @@ func encodeValueJSON(sb *strings.Builder, v Value) error {
 	}
 
 	sb.WriteString("null")
+	return nil
+}
+
+// encodeJSONString writes the JSON encoding of s without HTML-escaping (no
+// \u0026 / \u003c / \u003e), matching Python json.dumps's default behaviour.
+func encodeJSONString(sb *strings.Builder, s string) error {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		return err
+	}
+	// json.Encoder.Encode appends a trailing newline; strip it.
+	out := buf.Bytes()
+	if n := len(out); n > 0 && out[n-1] == '\n' {
+		out = out[:n-1]
+	}
+	sb.Write(out)
 	return nil
 }
 
@@ -462,8 +485,16 @@ func filterItems(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewList(nil), nil
 	}
 
+	// Python jinja2's |items filter raises TemplateError when applied to
+	// anything that isn't a mapping, and several chat templates rely on
+	// that error to bail out of an unsupported branch (e.g. when a
+	// tool_call's `arguments` is a JSON string instead of an object).
+	// Silently returning an empty list here let those templates render
+	// invalid prompts. The wording deliberately matches Python jinja2 so
+	// templates that surface this string get an identical message.
 	if !args[0].IsDict() {
-		return NewList(nil), nil
+		//lint:ignore ST1005 message text mirrors Python jinja2 verbatim
+		return Undefined(), fmt.Errorf("Can only get item pairs from a mapping.")
 	}
 
 	d := args[0].AsDict()
