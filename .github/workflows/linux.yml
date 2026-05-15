@@ -16,6 +16,11 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "stable"
+      - name: Install uv
+        # Used by TestRequestsAgainstTemplates to render the canonical
+        # HuggingFace Jinja2 reference output via scripts/render_python.py.
+        # Without uv on PATH that test will skip itself.
+        uses: astral-sh/setup-uv@v3
       - name: Run api/service tests
         timeout-minutes: 30
         run: |
