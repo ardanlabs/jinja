@@ -1,8 +1,6 @@
 package jinja
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -345,25 +343,19 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 
-	// The indented form is used rarely in chat templates; fall back to
-	// the reflection-based encoder for correctness instead of duplicating
-	// indent state in the direct encoder.
+	// The indented form keeps the encoding/json.MarshalIndent layout that
+	// this filter produced before, so it sorts keys and escapes HTML.
 	if indent, ok := kwargs["indent"]; ok && !indent.IsNone() && !indent.IsUndefined() {
 		n := int(toInt64(indent))
-		data, err := json.MarshalIndent(valueToGo(args[0]), "", strings.Repeat(" ", n))
-		if err != nil {
+		var sb strings.Builder
+		if err := encodeValueJSON(&sb, args[0], strings.Repeat(" ", n), 0, true); err != nil {
 			return NewString(""), nil
 		}
-		return NewString(string(data)), nil
+		return NewString(sb.String()), nil
 	}
 
-	// Direct Value-tree encoder. Bypasses valueToGo's intermediate
-	// map[string]any/[]any allocations and json.Marshal's reflection
-	// path. Per-render allocations drop from ~80 (Dict.Set + valueToGo
-	// + reflect) to a handful (one strings.Builder grow + one Marshal
-	// per leaf string for escaping).
 	var sb strings.Builder
-	if err := encodeValueJSON(&sb, args[0]); err != nil {
+	if err := encodeValueJSON(&sb, args[0], "", 0, false); err != nil {
 		return NewString(""), nil
 	}
 	return NewString(sb.String()), nil
@@ -372,18 +364,22 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 // encodeValueJSON writes the JSON encoding of v directly into sb without
 // going through an intermediate Go-typed tree.
 //
-// The output matches Python json.dumps's defaults so that prompts rendered by
-// this engine are byte-for-byte identical to those produced by HuggingFace's
-// reference Jinja2 implementation:
+// In compact mode the output matches Python json.dumps's defaults so that
+// prompts rendered by this engine are byte-for-byte identical to those produced
+// by HuggingFace's reference Jinja2 implementation:
 //
 //   - Item separator is ", " (with a trailing space), key/value separator is
 //     ": " — Python's default when no indent is given.
-//   - HTML metacharacters '&', '<', '>' are NOT escaped to \u0026 / \u003c /
-//     \u003e (Go's encoding/json escapes these by default; Python does not).
+//   - HTML metacharacters '&', '<', '>' are NOT escaped (Python does not escape
+//     them).
 //
 // Both differences would otherwise change the tokenization of every tool
 // definition that ends up in a chat prompt.
-func encodeValueJSON(sb *strings.Builder, v Value) error {
+//
+// In pretty mode the output matches encoding/json.MarshalIndent
+// instead, which is what the indented form of the tojson filter produced
+// before: keys sorted, HTML metacharacters escaped, one item per line.
+func encodeValueJSON(sb *strings.Builder, v Value, indent string, depth int, pretty bool) error {
 	switch v.kind {
 	case KindUndefined, KindNone, KindCallable:
 		sb.WriteString("null")
@@ -407,41 +403,67 @@ func encodeValueJSON(sb *strings.Builder, v Value) error {
 		if math.IsInf(f, 0) || math.IsNaN(f) {
 			return fmt.Errorf("tojson: cannot encode %v", f)
 		}
+		if pretty {
+			appendJSONFloat(sb, f)
+			return nil
+		}
 		var buf [32]byte
 		sb.Write(strconv.AppendFloat(buf[:0], f, 'g', -1, 64))
 		return nil
 
 	case KindString:
-		return encodeJSONString(sb, v.AsString())
+		appendJSONString(sb, v.AsString(), pretty)
+		return nil
 
 	case KindList:
+		items := v.AsList().Items
+		if len(items) == 0 {
+			sb.WriteString("[]")
+			return nil
+		}
+
 		sb.WriteByte('[')
-		for i, item := range v.AsList().Items {
+		for i, item := range items {
 			if i > 0 {
-				sb.WriteString(", ")
+				writeJSONComma(sb, indent, depth+1, pretty)
+			} else {
+				writeJSONOpen(sb, indent, depth+1, pretty)
 			}
-			if err := encodeValueJSON(sb, item); err != nil {
+			if err := encodeValueJSON(sb, item, indent, depth+1, pretty); err != nil {
 				return err
 			}
 		}
+		writeJSONClose(sb, indent, depth, pretty)
 		sb.WriteByte(']')
 		return nil
 
 	case KindDict:
-		sb.WriteByte('{')
 		d := v.AsDict()
-		for i, key := range d.Keys {
+		if len(d.Keys) == 0 {
+			sb.WriteString("{}")
+			return nil
+		}
+
+		keys := d.Keys
+		if pretty {
+			keys = append([]string(nil), keys...)
+			sort.Strings(keys)
+		}
+
+		sb.WriteByte('{')
+		for i, key := range keys {
 			if i > 0 {
-				sb.WriteString(", ")
+				writeJSONComma(sb, indent, depth+1, pretty)
+			} else {
+				writeJSONOpen(sb, indent, depth+1, pretty)
 			}
-			if err := encodeJSONString(sb, key); err != nil {
-				return err
-			}
+			appendJSONString(sb, key, pretty)
 			sb.WriteString(": ")
-			if err := encodeValueJSON(sb, d.Data[key]); err != nil {
+			if err := encodeValueJSON(sb, d.Data[key], indent, depth+1, pretty); err != nil {
 				return err
 			}
 		}
+		writeJSONClose(sb, indent, depth, pretty)
 		sb.WriteByte('}')
 		return nil
 	}
@@ -450,22 +472,35 @@ func encodeValueJSON(sb *strings.Builder, v Value) error {
 	return nil
 }
 
-// encodeJSONString writes the JSON encoding of s without HTML-escaping (no
-// \u0026 / \u003c / \u003e), matching Python json.dumps's default behaviour.
-func encodeJSONString(sb *strings.Builder, s string) error {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(s); err != nil {
-		return err
+func writeJSONOpen(sb *strings.Builder, indent string, depth int, pretty bool) {
+	if !pretty {
+		return
 	}
-	// json.Encoder.Encode appends a trailing newline; strip it.
-	out := buf.Bytes()
-	if n := len(out); n > 0 && out[n-1] == '\n' {
-		out = out[:n-1]
+	sb.WriteByte('\n')
+	writeJSONIndent(sb, indent, depth)
+}
+
+func writeJSONComma(sb *strings.Builder, indent string, depth int, pretty bool) {
+	if !pretty {
+		sb.WriteString(", ")
+		return
 	}
-	sb.Write(out)
-	return nil
+	sb.WriteString(",\n")
+	writeJSONIndent(sb, indent, depth)
+}
+
+func writeJSONClose(sb *strings.Builder, indent string, depth int, pretty bool) {
+	if !pretty {
+		return
+	}
+	sb.WriteByte('\n')
+	writeJSONIndent(sb, indent, depth)
+}
+
+func writeJSONIndent(sb *strings.Builder, indent string, depth int) {
+	for range depth {
+		sb.WriteString(indent)
+	}
 }
 
 func filterFromjson(args []Value, kwargs map[string]Value) (Value, error) {
@@ -473,12 +508,12 @@ func filterFromjson(args []Value, kwargs map[string]Value) (Value, error) {
 		return Undefined(), nil
 	}
 
-	var result any
-	if err := json.Unmarshal([]byte(args[0].AsString()), &result); err != nil {
+	v, err := parseJSON(args[0].AsString())
+	if err != nil {
 		return Undefined(), fmt.Errorf("fromjson: %w", err)
 	}
 
-	return FromGoValue(result), nil
+	return v, nil
 }
 
 func filterItems(args []Value, kwargs map[string]Value) (Value, error) {
@@ -1289,40 +1324,6 @@ func containsValue(container, item Value) bool {
 		return strings.Contains(container.AsString(), item.AsString())
 	}
 	return false
-}
-
-// valueToGo converts a Value back to a plain Go type suitable for
-// json.Marshal.
-func valueToGo(v Value) any {
-	switch v.kind {
-	case KindUndefined, KindNone:
-		return nil
-	case KindBool:
-		return v.AsBool()
-	case KindInt:
-		return v.AsInt()
-	case KindFloat:
-		return v.AsFloat()
-	case KindString:
-		return v.AsString()
-	case KindList:
-		list := v.AsList()
-		out := make([]any, list.Len())
-		for i, item := range list.Items {
-			out[i] = valueToGo(item)
-		}
-		return out
-	case KindDict:
-		d := v.AsDict()
-		out := make(map[string]any, d.Len())
-		for _, key := range d.Keys {
-			out[key] = valueToGo(d.Data[key])
-		}
-		return out
-	case KindCallable:
-		return nil
-	}
-	return nil
 }
 
 // printValue converts a Value to its template output string. Unlike

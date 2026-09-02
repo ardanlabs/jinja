@@ -3,7 +3,6 @@
 package jinja
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -372,14 +371,21 @@ func FromGoValue(v any) Value {
 	case float64:
 		return NewFloat(val)
 
-	case json.Number:
+	// Matched by method set instead of by name so that a caller can pass an
+	// encoding/json.Number from a UseNumber() decode without this package
+	// importing encoding/json, which costs ~1.6MB in a TinyGo wasm build.
+	case interface {
+		Int64() (int64, error)
+		Float64() (float64, error)
+		String() string
+	}:
 		// json.Number preserves whether the source JSON used a decimal
 		// point or exponent. Integers (no '.', 'e', 'E') become Int so
 		// that downstream tojson emits them as integers — matching
 		// Python json.dumps, which keeps int and float distinct. Without
 		// this, a value like 9007199254740991 round-trips as
 		// 9.007199254740991e+15 and breaks chat-template tokenization.
-		s := string(val)
+		s := val.String()
 		if !strings.ContainsAny(s, ".eE") {
 			if i, err := val.Int64(); err == nil {
 				return NewInt(i)
