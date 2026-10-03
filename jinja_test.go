@@ -76,21 +76,32 @@ func TestIfElse(t *testing.T) {
 }
 
 func TestTojsonFilter(t *testing.T) {
-	source := `{{ data | tojson }}`
-	tmpl, err := jinja.Compile(source)
-	if err != nil {
-		t.Fatalf("compile: %v", err)
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"default separators", `{{ data | tojson }}`, `{"name": "test", "values": [1, 2]}`},
+		{"compact separators", `{{ data | tojson(separators=[',', ':']) }}`, `{"name":"test","values":[1,2]}`},
 	}
 
-	result, err := tmpl.Render(map[string]any{
-		"data": map[string]any{"name": "test", "value": 42},
-	})
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tt.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
 
-	if !strings.Contains(result, `"name"`) || !strings.Contains(result, `"test"`) {
-		t.Errorf("tojson output unexpected: %q", result)
+			result, err := tmpl.Render(map[string]any{
+				"data": map[string]any{"name": "test", "values": []int{1, 2}},
+			})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if result != tt.want {
+				t.Errorf("result: got %q, want %q", result, tt.want)
+			}
+		})
 	}
 }
 
