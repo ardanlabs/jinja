@@ -345,6 +345,21 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 
+	itemSeparator := ", "
+	keySeparator := ": "
+	if separators, ok := kwargs["separators"]; ok {
+		if !separators.IsList() || separators.AsList().Len() != 2 {
+			return Undefined(), fmt.Errorf("tojson: separators must contain two strings")
+		}
+
+		items := separators.AsList().Items
+		if !items[0].IsString() || !items[1].IsString() {
+			return Undefined(), fmt.Errorf("tojson: separators must contain two strings")
+		}
+		itemSeparator = items[0].AsString()
+		keySeparator = items[1].AsString()
+	}
+
 	// The indented form is used rarely in chat templates; fall back to
 	// the reflection-based encoder for correctness instead of duplicating
 	// indent state in the direct encoder.
@@ -363,7 +378,7 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 	// + reflect) to a handful (one strings.Builder grow + one Marshal
 	// per leaf string for escaping).
 	var sb strings.Builder
-	if err := encodeValueJSON(&sb, args[0]); err != nil {
+	if err := encodeValueJSON(&sb, args[0], itemSeparator, keySeparator); err != nil {
 		return NewString(""), nil
 	}
 	return NewString(sb.String()), nil
@@ -383,7 +398,7 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 //
 // Both differences would otherwise change the tokenization of every tool
 // definition that ends up in a chat prompt.
-func encodeValueJSON(sb *strings.Builder, v Value) error {
+func encodeValueJSON(sb *strings.Builder, v Value, itemSeparator, keySeparator string) error {
 	switch v.kind {
 	case KindUndefined, KindNone, KindCallable:
 		sb.WriteString("null")
@@ -418,9 +433,9 @@ func encodeValueJSON(sb *strings.Builder, v Value) error {
 		sb.WriteByte('[')
 		for i, item := range v.AsList().Items {
 			if i > 0 {
-				sb.WriteString(", ")
+				sb.WriteString(itemSeparator)
 			}
-			if err := encodeValueJSON(sb, item); err != nil {
+			if err := encodeValueJSON(sb, item, itemSeparator, keySeparator); err != nil {
 				return err
 			}
 		}
@@ -432,13 +447,13 @@ func encodeValueJSON(sb *strings.Builder, v Value) error {
 		d := v.AsDict()
 		for i, key := range d.Keys {
 			if i > 0 {
-				sb.WriteString(", ")
+				sb.WriteString(itemSeparator)
 			}
 			if err := encodeJSONString(sb, key); err != nil {
 				return err
 			}
-			sb.WriteString(": ")
-			if err := encodeValueJSON(sb, d.Data[key]); err != nil {
+			sb.WriteString(keySeparator)
+			if err := encodeValueJSON(sb, d.Data[key], itemSeparator, keySeparator); err != nil {
 				return err
 			}
 		}
