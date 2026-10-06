@@ -572,7 +572,9 @@ func filterDefault(args []Value, kwargs map[string]Value) (Value, error) {
 	}
 
 	boolean := false
-	if b, ok := kwargs["boolean"]; ok && b.IsBool() {
+	if len(args) > 2 && args[2].IsBool() {
+		boolean = args[2].AsBool()
+	} else if b, ok := kwargs["boolean"]; ok && b.IsBool() {
 		boolean = b.AsBool()
 	}
 
