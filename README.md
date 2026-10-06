@@ -124,17 +124,25 @@ See the [examples](examples/) directory for more, including tool calling.
 
 The test suite compiles and renders the chat templates from these models:
 
-| Model                         | Family      |
-| ----------------------------- | ----------- |
-| Qwen3-8B                      | Qwen3       |
-| gpt-oss-20b                   | GPT-OSS     |
-| Qwen3-VL-30B-A3B-Instruct     | Qwen3-VL    |
-| Qwen3.5-35B-A3B               | Qwen3.5     |
-| Qwen2-Audio-7B                | Qwen2-Audio |
-| gemma-4-26B-A4B-it            | Gemma 4     |
-| Ministral-3-14B-Instruct-2512 | Mistral 3   |
-| rnj-1-instruct                | RNJ-1       |
-| LFM2.5-VL-1.6B                | LFM2.5      |
+| Model                            | Family             |
+| -------------------------------- | ------------------ |
+| DeepSeek-V4-Flash                | DeepSeek V4        |
+| gemma-4-26B-A4B-it               | Gemma 4            |
+| GLM-5.2                          | GLM 5              |
+| gpt-oss-20b                      | GPT-OSS            |
+| Kimi-K3                          | Kimi K3            |
+| laguna                           | Laguna             |
+| LFM2.5-VL-1.6B                   | LFM2.5             |
+| Llama-3.2-1B-Instruct            | Llama 3.2          |
+| Ministral-3-14B-Instruct-2512    | Mistral 3          |
+| Mistral-Medium-3.5-128B          | Mistral Medium 3.5 |
+| NVIDIA-Nemotron-3-Super-120B-A12B | Nemotron 3         |
+| Qwen2-Audio-7B                   | Qwen2-Audio        |
+| Qwen3-8B                         | Qwen3              |
+| Qwen3-VL-30B-A3B-Instruct        | Qwen3-VL           |
+| Qwen3.5-35B-A3B                  | Qwen3.5            |
+| Qwen3.6-35B-A3B                  | Qwen3.6            |
+| rnj-1-instruct                   | RNJ-1              |
 
 ## License
 

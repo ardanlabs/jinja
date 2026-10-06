@@ -1041,6 +1041,37 @@ func TestDictGet(t *testing.T) {
 	}
 }
 
+func TestDefaultFilterBoolean(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		data   map[string]any
+		want   string
+	}{
+		{name: "falsey value without boolean remains", source: `{{ value | default('fallback') }}`, data: map[string]any{"value": ""}},
+		{name: "falsey value with positional boolean uses default", source: `{{ value | default('fallback', true) }}`, data: map[string]any{"value": ""}, want: "fallback"},
+		{name: "truthy value with positional boolean remains", source: `{{ value | default('fallback', true) }}`, data: map[string]any{"value": "actual"}, want: "actual"},
+		{name: "falsey value with keyword boolean uses default", source: `{{ value | default('fallback', boolean=true) }}`, data: map[string]any{"value": false}, want: "fallback"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tt.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+
+			got, err := tmpl.Render(tt.data)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("render: got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRegression(t *testing.T) {
 	for name, content := range chatTemplates {
 		t.Run(name, func(t *testing.T) {
