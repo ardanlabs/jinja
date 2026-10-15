@@ -1,0 +1,9 @@
+{
+  "base_commit": "b1bf3a06adcade12b59a1dfaa2edef6f4a7d6e09",
+  "selected_fix_commit": "7acf3924b902594d95c01c5e27be459fb4dd7911",
+  "original_branch": "cd-fix-numeric-ordering",
+  "corpus_sha256": "e844754b9724b93fd2fc162d3d756cca40a57d6ed07188b02d02b2bcbe834bb9",
+  "comparison": "Exact successful output; compile/render error stage agreement. Error strings are recorded, not equated.",
+  "previous_test_commit": "6aa82b15124aa1c05c3e954c2e73d3e9b2841247",
+  "previous_fix_commit": "7b5915e802004bef8e0a9fa9c16d79d3753c791e"
+}

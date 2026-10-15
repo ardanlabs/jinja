@@ -1,0 +1,14 @@
+[
+  {
+    "id": "B011-01",
+    "source": "{{ 9007199254740992 < 9007199254740993 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 745
+  },
+  {
+    "id": "B011-02",
+    "source": "{{ 9007199254740993 > 9007199254740992.0 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 749
+  }
+]
