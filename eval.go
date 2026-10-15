@@ -821,7 +821,7 @@ func (e *evaluator) evalBinary(n *binExpr) (Value, error) {
 	case "-":
 		return subValues(left, right), nil
 	case "*":
-		return mulValues(left, right), nil
+		return mulValues(left, right)
 	case "/":
 		return divValues(left, right), nil
 	case "//":
@@ -1318,14 +1318,60 @@ func subValues(a, b Value) Value {
 	return NewInt(toInt64(a) - toInt64(b))
 }
 
-func mulValues(a, b Value) Value {
-	if a.IsString() && b.IsInt() {
-		return NewString(strings.Repeat(a.AsString(), int(b.AsInt())))
+func isSequenceValue(v Value) bool { return v.IsString() || v.IsList() }
+func isRepeatCount(v Value) bool   { return v.IsInt() || v.IsBool() }
+func sequenceLength(v Value) int {
+	if v.IsString() {
+		return len(v.AsString())
 	}
+	return v.AsList().Len()
+}
+func repeatExceedsLimit(length int, count int64) bool {
+	// Division avoids overflowing while checking the allocation limit.
+	return count > 0 && int64(length) > maxRepeatLen/count
+}
+
+func mulValues(a, b Value) (Value, error) {
+	switch {
+	case isSequenceValue(a) && isRepeatCount(b):
+		return repeatValue(a, toInt64(b))
+	case isRepeatCount(a) && isSequenceValue(b):
+		return repeatValue(b, toInt64(a))
+	}
+
 	if a.IsFloat() || b.IsFloat() {
-		return NewFloat(toFloat64(a) * toFloat64(b))
+		return NewFloat(toFloat64(a) * toFloat64(b)), nil
 	}
-	return NewInt(toInt64(a) * toInt64(b))
+	return NewInt(toInt64(a) * toInt64(b)), nil
+}
+
+// maxRepeatLen bounds the length of a string or list built with "*", which
+// could otherwise exhaust memory.
+const maxRepeatLen = 1 << 26
+
+func repeatValue(seq Value, n int64) (Value, error) {
+	n = max(n, 0)
+
+	length := sequenceLength(seq)
+	// Empty sequences must not loop once per requested repetition.
+	if length == 0 {
+		return seq, nil
+	}
+
+	if repeatExceedsLimit(length, n) {
+		return Undefined(), fmt.Errorf("repeated sequence is too large")
+	}
+
+	if seq.IsString() {
+		return NewString(strings.Repeat(seq.AsString(), int(n))), nil
+	}
+
+	src := seq.AsList().Items
+	items := make([]Value, 0, length*int(n))
+	for range n {
+		items = append(items, src...)
+	}
+	return NewList(items), nil
 }
 
 func divValues(a, b Value) Value {

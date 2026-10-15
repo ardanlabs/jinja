@@ -1,0 +1,36 @@
+[
+  {
+    "id": "B015-01",
+    "stage": "render",
+    "output": "---"
+  },
+  {
+    "id": "B015-02",
+    "stage": "render"
+  },
+  {
+    "id": "B016-01",
+    "stage": "render",
+    "output": "[1, 0, 1, 0]"
+  },
+  {
+    "id": "B016-02",
+    "stage": "render",
+    "output": "[]"
+  },
+  {
+    "id": "B017-01",
+    "stage": "render_error",
+    "error": "repeated sequence is too large"
+  },
+  {
+    "id": "B017-02",
+    "stage": "render_error",
+    "error": "repeated sequence is too large"
+  },
+  {
+    "id": "empty-list-huge-count",
+    "stage": "render",
+    "output": "[]"
+  }
+]
