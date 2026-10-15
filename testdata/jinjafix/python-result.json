@@ -1,0 +1,30 @@
+{
+  "python": "3.14.4",
+  "jinja2": "3.1.6",
+  "settings": {
+    "trim_blocks": true,
+    "lstrip_blocks": true,
+    "keep_trailing_newline": true
+  },
+  "extensions": [
+    "fromjson=json.loads"
+  ],
+  "cases": [
+    {
+      "id": "B024-01",
+      "stage": "compile_error",
+      "error": "expected token 'end of print statement', got 'e'",
+      "exception": "TemplateSyntaxError"
+    },
+    {
+      "id": "B024-02",
+      "stage": "render",
+      "output": "999999999999999999999999"
+    },
+    {
+      "id": "B025-01",
+      "stage": "render",
+      "output": "-9223372036854775808"
+    }
+  ]
+}

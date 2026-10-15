@@ -1,0 +1,12 @@
+{
+  "base_commit": "b1bf3a06adcade12b59a1dfaa2edef6f4a7d6e09",
+  "selected_fix_commit": "8500a854061b03599d9f73179f923936e612045a",
+  "original_branch": "8500a854061b03599d9f73179f923936e612045a",
+  "corpus_sha256": "e844754b9724b93fd2fc162d3d756cca40a57d6ed07188b02d02b2bcbe834bb9",
+  "comparison": "Exact successful output; compile/render error stage agreement. Error strings are recorded, not equated.",
+  "parity_exceptions": [
+    "B024-02"
+  ],
+  "previous_test_commit": "cfed20e6c5780f3ead98af63d49f0dc403addbfe",
+  "previous_fix_commit": "959b06a2eac6531e9e9399a6233c6725af34c4e3"
+}
