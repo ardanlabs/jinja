@@ -1,0 +1,12 @@
+[
+  {
+    "id": "B058-01",
+    "stage": "process_error",
+    "error": "exit status 2"
+  },
+  {
+    "id": "B059-01",
+    "stage": "process_error",
+    "error": "exit status 2"
+  }
+]

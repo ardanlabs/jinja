@@ -1,0 +1,14 @@
+[
+  {
+    "id": "B058-01",
+    "source": "{% set d={'name':'upf'} %}{% set ignored=d.update({'parent':d}) %}{{ d }}:{{ d == d }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1029
+  },
+  {
+    "id": "B059-01",
+    "source": "{% set d={} %}{% set ignored=d.update({'parent':d}) %}{{ d|tojson }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1032
+  }
+]
