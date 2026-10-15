@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"sort"
 	"strconv"
@@ -488,12 +489,16 @@ func filterFromjson(args []Value, kwargs map[string]Value) (Value, error) {
 		return Undefined(), nil
 	}
 
-	var result any
-	if err := json.Unmarshal([]byte(args[0].AsString()), &result); err != nil {
+	dec := json.NewDecoder(strings.NewReader(args[0].AsString()))
+	dec.UseNumber()
+	result, err := decodeJSONValue(dec)
+	if err != nil {
 		return Undefined(), fmt.Errorf("fromjson: %w", err)
 	}
-
-	return FromGoValue(result), nil
+	if _, err := dec.Token(); err != io.EOF {
+		return Undefined(), fmt.Errorf("fromjson: trailing data")
+	}
+	return result, nil
 }
 
 func filterItems(args []Value, kwargs map[string]Value) (Value, error) {
