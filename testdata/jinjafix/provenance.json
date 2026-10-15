@@ -1,0 +1,9 @@
+{
+  "base_commit": "b1bf3a06adcade12b59a1dfaa2edef6f4a7d6e09",
+  "selected_fix_commit": "03a55d208695c74562d71154a63015fafe96107f",
+  "original_branch": "cd-fix-range-overflow",
+  "corpus_sha256": "e844754b9724b93fd2fc162d3d756cca40a57d6ed07188b02d02b2bcbe834bb9",
+  "comparison": "Exact successful output; compile/render error stage agreement. Error strings are recorded, not equated.",
+  "previous_test_commit": "771abdc8d11ad2ff3a75a57c72cb894f993c9469",
+  "previous_fix_commit": "23b0273ce8c0e9a900f85bccb8502747712c9c84"
+}
