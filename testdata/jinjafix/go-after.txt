@@ -1,0 +1,6 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B041-02
+--- PASS: TestJinjaFixRegression (0.00s)
+    --- PASS: TestJinjaFixRegression/B041-02 (0.00s)
+PASS
+ok  	github.com/ardanlabs/jinja	0.008s
