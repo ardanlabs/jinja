@@ -1,0 +1,12 @@
+[
+  {
+    "id": "B058-01",
+    "stage": "render",
+    "output": "{'name': 'upf', 'parent': {...}}:True"
+  },
+  {
+    "id": "B059-01",
+    "stage": "render_error",
+    "error": "tojson: circular reference detected"
+  }
+]

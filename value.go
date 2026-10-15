@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -168,8 +169,12 @@ func (v Value) AsCallable() *Callable {
 
 // =============================================================================
 
-// String returns a Python-style string representation of the value.
+// Recursion markers keep self-referential containers printable, as in Python.
 func (v Value) String() string {
+	return renderValue(v, nil)
+}
+
+func renderValue(v Value, outer []any) string {
 	switch v.kind {
 	case KindUndefined:
 		return "Undefined"
@@ -194,26 +199,34 @@ func (v Value) String() string {
 
 	case KindList:
 		list := v.v.(*List)
+		if slices.Contains(outer, any(list)) {
+			return "[...]"
+		}
+		outer = append(outer, list)
 		var b strings.Builder
 		b.WriteByte('[')
 		for i, item := range list.Items {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(item.String())
+			b.WriteString(renderValue(item, outer))
 		}
 		b.WriteByte(']')
 		return b.String()
 
 	case KindDict:
 		d := v.v.(*Dict)
+		if slices.Contains(outer, any(d)) {
+			return "{...}"
+		}
+		outer = append(outer, d)
 		var b strings.Builder
 		b.WriteByte('{')
 		for i, key := range d.Keys {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			fmt.Fprintf(&b, "'%s': %s", key, d.Data[key].String())
+			fmt.Fprintf(&b, "'%s': %s", key, renderValue(d.Data[key], outer))
 		}
 		b.WriteByte('}')
 		return b.String()
@@ -251,6 +264,11 @@ func (v Value) Equals(other Value) bool {
 	case KindList:
 		a := v.v.(*List)
 		b := other.v.(*List)
+		if a == b {
+			// As in Python, which also keeps a list that contains
+			// itself from comparing forever.
+			return true
+		}
 		if a.Len() != b.Len() {
 			return false
 		}
@@ -264,6 +282,9 @@ func (v Value) Equals(other Value) bool {
 	case KindDict:
 		a := v.v.(*Dict)
 		b := other.v.(*Dict)
+		if a == b {
+			return true
+		}
 		if a.Len() != b.Len() {
 			return false
 		}
