@@ -1,0 +1,37 @@
+[
+  {
+    "id": "B015-01",
+    "stage": "render",
+    "output": "0"
+  },
+  {
+    "id": "B015-02",
+    "stage": "panic",
+    "error": "strings: negative Repeat count"
+  },
+  {
+    "id": "B016-01",
+    "stage": "render",
+    "output": "0"
+  },
+  {
+    "id": "B016-02",
+    "stage": "render",
+    "output": "0"
+  },
+  {
+    "id": "B017-01",
+    "stage": "panic",
+    "error": "strings: Repeat output length overflow"
+  },
+  {
+    "id": "B017-02",
+    "stage": "render",
+    "output": "0"
+  },
+  {
+    "id": "empty-list-huge-count",
+    "stage": "render",
+    "output": "0"
+  }
+]

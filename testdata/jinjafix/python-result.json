@@ -1,0 +1,51 @@
+{
+  "python": "3.14.4",
+  "jinja2": "3.1.6",
+  "settings": {
+    "trim_blocks": true,
+    "lstrip_blocks": true,
+    "keep_trailing_newline": true
+  },
+  "extensions": [
+    "fromjson=json.loads"
+  ],
+  "cases": [
+    {
+      "id": "B015-01",
+      "stage": "render",
+      "output": "---"
+    },
+    {
+      "id": "B015-02",
+      "stage": "render",
+      "output": ""
+    },
+    {
+      "id": "B016-01",
+      "stage": "render",
+      "output": "[1, 0, 1, 0]"
+    },
+    {
+      "id": "B016-02",
+      "stage": "render",
+      "output": "[]"
+    },
+    {
+      "id": "B017-01",
+      "stage": "render_error",
+      "error": "repeated string is too long",
+      "exception": "OverflowError"
+    },
+    {
+      "id": "B017-02",
+      "stage": "render_error",
+      "error": "",
+      "exception": "MemoryError"
+    },
+    {
+      "id": "empty-list-huge-count",
+      "stage": "render",
+      "output": "[]"
+    }
+  ]
+}
