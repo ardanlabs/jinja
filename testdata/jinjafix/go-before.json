@@ -1,0 +1,27 @@
+[
+  {
+    "id": "B009-01",
+    "stage": "render",
+    "output": "True"
+  },
+  {
+    "id": "B009-02",
+    "stage": "render",
+    "output": "True"
+  },
+  {
+    "id": "B010-01",
+    "stage": "render",
+    "output": "False"
+  },
+  {
+    "id": "B010-02",
+    "stage": "render",
+    "output": "False"
+  },
+  {
+    "id": "B010-03",
+    "stage": "render",
+    "output": "False"
+  }
+]

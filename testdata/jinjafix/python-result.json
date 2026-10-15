@@ -1,0 +1,39 @@
+{
+  "python": "3.14.4",
+  "jinja2": "3.1.6",
+  "settings": {
+    "trim_blocks": true,
+    "lstrip_blocks": true,
+    "keep_trailing_newline": true
+  },
+  "extensions": [
+    "fromjson=json.loads"
+  ],
+  "cases": [
+    {
+      "id": "B009-01",
+      "stage": "render",
+      "output": "False"
+    },
+    {
+      "id": "B009-02",
+      "stage": "render",
+      "output": "False"
+    },
+    {
+      "id": "B010-01",
+      "stage": "render",
+      "output": "True"
+    },
+    {
+      "id": "B010-02",
+      "stage": "render",
+      "output": "True"
+    },
+    {
+      "id": "B010-03",
+      "stage": "render",
+      "output": "True"
+    }
+  ]
+}

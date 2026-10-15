@@ -1,0 +1,32 @@
+[
+  {
+    "id": "B009-01",
+    "source": "{{ 9007199254740992 == 9007199254740993 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 725
+  },
+  {
+    "id": "B009-02",
+    "source": "{{ 9007199254740993 == 9007199254740992.0 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 729
+  },
+  {
+    "id": "B010-01",
+    "source": "{{ [{'qfi': 1}] == [{'qfi': 1.0}] }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 733
+  },
+  {
+    "id": "B010-02",
+    "source": "{{ 1.0 in [1] }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 737
+  },
+  {
+    "id": "B010-03",
+    "source": "{{ true == 1 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 741
+  }
+]

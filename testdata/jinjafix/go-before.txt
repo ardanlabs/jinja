@@ -1,0 +1,20 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B009-01
+    jinjafix_regression_test.go:121: Go: stage=render output="True"; expected: stage=render output="False"; error=
+=== RUN   TestJinjaFixRegression/B009-02
+    jinjafix_regression_test.go:121: Go: stage=render output="True"; expected: stage=render output="False"; error=
+=== RUN   TestJinjaFixRegression/B010-01
+    jinjafix_regression_test.go:121: Go: stage=render output="False"; expected: stage=render output="True"; error=
+=== RUN   TestJinjaFixRegression/B010-02
+    jinjafix_regression_test.go:121: Go: stage=render output="False"; expected: stage=render output="True"; error=
+=== RUN   TestJinjaFixRegression/B010-03
+    jinjafix_regression_test.go:121: Go: stage=render output="False"; expected: stage=render output="True"; error=
+--- FAIL: TestJinjaFixRegression (0.02s)
+    --- FAIL: TestJinjaFixRegression/B009-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B009-02 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B010-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B010-02 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B010-03 (0.00s)
+FAIL
+FAIL	github.com/ardanlabs/jinja	0.024s
+FAIL
