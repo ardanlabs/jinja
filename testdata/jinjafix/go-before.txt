@@ -1,0 +1,17 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B064-01
+    jinjafix_regression_test.go:121: Go: stage=panic output=""; expected: stage=render output="[1, 2]"; error=runtime error: slice bounds out of range [2:1]
+=== RUN   TestJinjaFixRegression/B064-02
+    jinjafix_regression_test.go:121: Go: stage=panic output=""; expected: stage=render output="[0]"; error=runtime error: slice bounds out of range [2:1]
+=== RUN   TestJinjaFixRegression/B065-01
+    jinjafix_regression_test.go:121: Go: stage=panic output=""; expected: stage=render output="1"; error=runtime error: slice bounds out of range [3:2]
+=== RUN   TestJinjaFixRegression/B065-02
+    jinjafix_regression_test.go:121: Go: stage=panic output=""; expected: stage=render output="1"; error=runtime error: slice bounds out of range [3:2]
+--- FAIL: TestJinjaFixRegression (0.02s)
+    --- FAIL: TestJinjaFixRegression/B064-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B064-02 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B065-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B065-02 (0.00s)
+FAIL
+FAIL	github.com/ardanlabs/jinja	0.020s
+FAIL
