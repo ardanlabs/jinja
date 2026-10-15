@@ -1,0 +1,8 @@
+[
+  {
+    "id": "B021-01",
+    "source": "{{ [9007199254740993, 2]|sum }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 828
+  }
+]
