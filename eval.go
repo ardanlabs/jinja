@@ -1357,13 +1357,5 @@ func powValues(a, b Value) Value {
 }
 
 func valuesEqual(a, b Value) bool {
-	// Cross-type numeric comparison.
-	if a.IsNumber() && b.IsNumber() {
-		return toFloat64(a) == toFloat64(b)
-	}
-	// None == None.
-	if a.IsNone() && b.IsNone() {
-		return true
-	}
 	return a.Equals(b)
 }
