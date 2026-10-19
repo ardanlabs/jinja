@@ -22,7 +22,9 @@ jobs:
         # Without uv on PATH that test will skip itself.
         uses: astral-sh/setup-uv@v10.0.1
       - name: Install static analysis tools
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run api/service tests
         timeout-minutes: 30
         run: |
