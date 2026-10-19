@@ -2,6 +2,7 @@ package jinja_test
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +101,33 @@ func TestTojsonFilter(t *testing.T) {
 			}
 			if result != tt.want {
 				t.Errorf("result: got %q, want %q", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestListFilter(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"dictionary keys in insertion order", `{{ {'z': 9, 'a': 1} | list | tojson }}`, `["z", "a"]`},
+		{"empty dictionary", `{{ {} | list | tojson }}`, `[]`},
+		{"list unchanged", `{{ [3, 1] | list | tojson }}`, `[3, 1]`},
+		{"unicode string", `{{ 'café' | list | tojson }}`, `["c", "a", "f", "é"]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -1067,6 +1095,142 @@ func TestDefaultFilterBoolean(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("render: got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Beam's unmodified template comes from unsloth/Beam-1.0-501B-A23B-GGUF,
+// revision 4cc80272381734e2b16b34c1af3362c7268a0ebc, chat_template.jinja.
+// TestRequestsAgainstTemplates also compares it against Python Jinja2 for
+// every captured request, including the Beam-specific tool round trip.
+func TestRender_Beam_ToolRoundTrip(t *testing.T) {
+	tmpl, err := jinja.Compile(chatTemplates["Beam-1.0-501B-A23B"])
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	data := buildRenderData(loadRequests(t)["kronk-req-beam"])
+	data["allow_missing_thinking"] = false
+	got, err := tmpl.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	for _, fragment := range []string{
+		"<|channel|>analysis<|message|>I can write the note and inspect the directory in parallel.<|end|>",
+		"<|start|>assistant to=write_note<|channel|>analysis <|constrain|>xml<|message|>",
+		"<rfl:parameter name=\"count\">\n3\n</rfl:parameter>",
+		"<rfl:parameter name=\"options\">\n{\"active\": true, \"labels\": [\"café\", \"draft\"]}\n</rfl:parameter>",
+		"<rfl:parameter name=\"text\">\n  café & <tag> literal \\n\nnext line  \n</rfl:parameter>",
+		"<|end|><|start|>assistant to=bash<|channel|>analysis <|constrain|>xml<|message|>",
+		"<rfl:parameter name=\"command\">\npwd\n</rfl:parameter><|call|>",
+		"<|start|>write_note to=assistant<|channel|>analysis<|message|>Note saved.<|end|>",
+		"<|start|>bash to=assistant<|channel|>analysis<|message|>/workspace<|end|>",
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Errorf("output missing %q", fragment)
+		}
+	}
+	if !strings.HasSuffix(got, "<|start|>assistant") {
+		t.Errorf("output missing assistant generation prefix: %q", got)
+	}
+}
+
+func TestRender_Beam_ReasoningOptions(t *testing.T) {
+	tmpl, err := jinja.Compile(chatTemplates["Beam-1.0-501B-A23B"])
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		kwargs  map[string]any
+		want    string
+		wantErr string
+	}{
+		{name: "default", want: "Reasoning effort: 512\n\n"},
+		{name: "null", kwargs: map[string]any{"reasoning_effort": nil}, want: "Reasoning effort: 512\n\n"},
+		{name: "minimal", kwargs: map[string]any{"reasoning_effort": "minimal"}, want: "Reasoning effort: 8\n\n"},
+		{name: "low", kwargs: map[string]any{"reasoning_effort": "low"}, want: "Reasoning effort: 32\n\n"},
+		{name: "medium", kwargs: map[string]any{"reasoning_effort": "medium"}, want: "Reasoning effort: 64\n\n"},
+		{name: "high", kwargs: map[string]any{"reasoning_effort": "high"}, want: "Reasoning effort: 128\n\n"},
+		{name: "xhigh", kwargs: map[string]any{"reasoning_effort": "xhigh"}, want: "Reasoning effort: 256\n\n"},
+		{name: "max", kwargs: map[string]any{"reasoning_effort": "max"}, want: "Reasoning effort: 512\n\n"},
+		{name: "integer", kwargs: map[string]any{"reasoning_effort": 17}, want: "Reasoning effort: 17\n\n"},
+		{name: "invalid-none", kwargs: map[string]any{"reasoning_effort": "none"}, wantErr: "reasoning_effort must be an int or one of:"},
+		{name: "missing-history-reasoning", kwargs: map[string]any{
+			"allow_missing_thinking": false,
+			"messages":               []any{map[string]any{"role": "assistant", "content": "Answer."}},
+		}, wantErr: "is missing its reasoning"},
+		{name: "preserved-history-reasoning", kwargs: map[string]any{
+			"allow_missing_thinking": false,
+			"messages":               []any{map[string]any{"role": "assistant", "content": "Answer.", "reasoning_content": "Thought."}},
+		}, want: "<|channel|>analysis<|message|>Thought.<|end|>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := map[string]any{
+				"messages":              []any{map[string]any{"role": "user", "content": "Hello."}},
+				"add_generation_prompt": true,
+			}
+			maps.Copy(data, tc.kwargs)
+			got, err := tmpl.Render(data)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("render: got %v, want error containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("output missing %q: %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestRender_Beam_BuiltinBash(t *testing.T) {
+	tmpl, err := jinja.Compile(chatTemplates["Beam-1.0-501B-A23B"])
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	for _, tc := range []struct {
+		name        string
+		command     map[string]any
+		wantBuiltin bool
+	}{
+		{"unconstrained", map[string]any{"type": "string"}, true},
+		{"constrained", map[string]any{"type": "string", "enum": []any{"pwd"}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tmpl.Render(map[string]any{
+				"messages":              []any{map[string]any{"role": "user", "content": "Check the directory."}},
+				"add_generation_prompt": true,
+				"tools": []any{map[string]any{"type": "function", "function": map[string]any{
+					"name": "bash", "description": "Custom shell description.",
+					"parameters": map[string]any{"type": "object", "properties": map[string]any{"command": tc.command}},
+				}}},
+			})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			system, rest, ok := strings.Cut(got, "<|end|>")
+			if !ok {
+				t.Fatal("output missing system message terminator")
+			}
+			if inSystem := strings.Contains(system, "type bash ="); inSystem != tc.wantBuiltin {
+				t.Errorf("bash in system: got %v, want %v", inSystem, tc.wantBuiltin)
+			}
+			if inDeveloper := strings.Contains(rest, "type bash ="); inDeveloper == tc.wantBuiltin {
+				t.Errorf("bash in developer: got %v, want %v", inDeveloper, !tc.wantBuiltin)
+			}
+			if tc.wantBuiltin && !strings.Contains(system, "Execute a bash command.") {
+				t.Error("builtin bash missing trained description")
+			}
+			if !tc.wantBuiltin && !strings.Contains(rest, "Custom shell description.") {
+				t.Error("constrained bash missing supplied description")
 			}
 		})
 	}

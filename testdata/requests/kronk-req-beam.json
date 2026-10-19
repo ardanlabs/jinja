@@ -1,0 +1,64 @@
+{
+  "messages": [
+    {"role": "system", "content": "Preserve note contents exactly."},
+    {"role": "user", "content": "Write a note and check the current directory."},
+    {
+      "role": "assistant",
+      "content": "",
+      "reasoning_content": "I can write the note and inspect the directory in parallel.",
+      "tool_calls": [
+        {
+          "id": "call_note_1",
+          "type": "function",
+          "function": {
+            "name": "write_note",
+            "arguments": "{\"count\":3,\"options\":{\"active\":true,\"labels\":[\"café\",\"draft\"]},\"text\":\"  café & <tag> literal \\\\n\\nnext line  \"}"
+          }
+        },
+        {
+          "id": "call_bash_1",
+          "type": "function",
+          "function": {"name": "bash", "arguments": "{\"command\":\"pwd\"}"}
+        }
+      ]
+    },
+    {"role": "tool", "tool_call_id": "call_note_1", "content": "Note saved."},
+    {"role": "tool", "tool_call_id": "call_bash_1", "content": "/workspace"}
+  ],
+  "tools": [
+    {
+      "function": {
+        "description": "Write a note without changing its contents.",
+        "name": "write_note",
+        "parameters": {
+          "properties": {
+            "count": {"type": "integer"},
+            "options": {
+              "properties": {
+                "active": {"type": "boolean"},
+                "labels": {"items": {"type": "string"}, "type": "array"}
+              },
+              "type": "object"
+            },
+            "text": {"type": "string"}
+          },
+          "required": ["text", "count"],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    },
+    {
+      "function": {
+        "description": "Run a shell command.",
+        "name": "bash",
+        "parameters": {
+          "properties": {"command": {"type": "string"}},
+          "required": ["command"],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    }
+  ]
+}

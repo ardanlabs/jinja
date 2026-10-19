@@ -775,6 +775,14 @@ func filterList(args []Value, kwargs map[string]Value) (Value, error) {
 	if v.IsList() {
 		return v, nil
 	}
+	if v.IsDict() {
+		keys := v.AsDict().OrderedKeys()
+		items := make([]Value, len(keys))
+		for i, key := range keys {
+			items[i] = NewString(key)
+		}
+		return NewList(items), nil
+	}
 	if v.IsString() {
 		runes := []rune(v.AsString())
 		items := make([]Value, len(runes))

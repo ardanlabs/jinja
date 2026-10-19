@@ -2,7 +2,7 @@
 
 A pure-Go Jinja template engine purpose-built for rendering LLM chat templates. It compiles and executes the Jinja templates embedded in GGUF model files, turning conversations and tool definitions into the exact token sequences each model expects. Zero dependencies, zero CGO.
 
-Copyright 2026 Ardan Labs
+Copyright 2026, 2027 Ardan Labs
 
 hello@ardanlabs.com
 
@@ -124,25 +124,32 @@ See the [examples](examples/) directory for more, including tool calling.
 
 The test suite compiles and renders the chat templates from these models:
 
-| Model                            | Family             |
-| -------------------------------- | ------------------ |
-| DeepSeek-V4-Flash                | DeepSeek V4        |
-| gemma-4-26B-A4B-it               | Gemma 4            |
-| GLM-5.2                          | GLM 5              |
-| gpt-oss-20b                      | GPT-OSS            |
-| Kimi-K3                          | Kimi K3            |
-| laguna                           | Laguna             |
-| LFM2.5-VL-1.6B                   | LFM2.5             |
-| Llama-3.2-1B-Instruct            | Llama 3.2          |
-| Ministral-3-14B-Instruct-2512    | Mistral 3          |
-| Mistral-Medium-3.5-128B          | Mistral Medium 3.5 |
+| Model                             | Family             |
+| --------------------------------- | ------------------ |
+| Beam-1.0-501B-A23B                | Beam               |
+| DeepSeek-V4-Flash                 | DeepSeek V4        |
+| gemma-4-26B-A4B-it                | Gemma 4            |
+| GLM-5.2                           | GLM 5              |
+| gpt-oss-20b                       | GPT-OSS            |
+| Kimi-K3                           | Kimi K3            |
+| laguna                            | Laguna             |
+| LFM2.5-VL-1.6B                    | LFM2.5             |
+| Llama-3.2-1B-Instruct             | Llama 3.2          |
+| Ministral-3-14B-Instruct-2512     | Mistral 3          |
+| Mistral-Medium-3.5-128B           | Mistral Medium 3.5 |
 | NVIDIA-Nemotron-3-Super-120B-A12B | Nemotron 3         |
-| Qwen2-Audio-7B                   | Qwen2-Audio        |
-| Qwen3-8B                         | Qwen3              |
-| Qwen3-VL-30B-A3B-Instruct        | Qwen3-VL           |
-| Qwen3.5-35B-A3B                  | Qwen3.5            |
-| Qwen3.6-35B-A3B                  | Qwen3.6            |
-| rnj-1-instruct                   | RNJ-1              |
+| Qwen2-Audio-7B                    | Qwen2-Audio        |
+| Qwen3-8B                          | Qwen3              |
+| Qwen3-VL-30B-A3B-Instruct         | Qwen3-VL           |
+| Qwen3.5-35B-A3B                   | Qwen3.5            |
+| Qwen3.6-35B-A3B                   | Qwen3.6            |
+| rnj-1-instruct                    | RNJ-1              |
+
+Beam coverage includes XML tool-call arguments, parallel tool calls and replies
+matched by call ID, reasoning-effort options, and built-in versus custom `bash`
+tool definitions. The unmodified upstream template is included in the
+byte-for-byte comparisons against Python Jinja2. These tests validate template
+rendering, not model inference.
 
 ## License
 

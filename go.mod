@@ -1,6 +1,6 @@
 module github.com/ardanlabs/jinja
 
-go 1.26.0
+go 1.27.0
 
 tool (
 	golang.org/x/vuln/cmd/govulncheck
