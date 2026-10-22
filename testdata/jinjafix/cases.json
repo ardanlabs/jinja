@@ -1,0 +1,22 @@
+[
+  {
+    "id": "B024-01",
+    "source": "{{ 1.2e+ }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 848
+  },
+  {
+    "id": "B024-02",
+    "source": "{{ 999999999999999999999999 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 851,
+    "go_stage": "compile_error",
+    "reason": "Existing Go int64 contract: Python renders this arbitrary-precision integer; Go rejects it. This is an explicit output-parity exception, not a Python bug."
+  },
+  {
+    "id": "B025-01",
+    "source": "{{ -9223372036854775808 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 854
+  }
+]

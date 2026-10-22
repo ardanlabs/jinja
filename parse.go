@@ -511,9 +511,18 @@ func (p *exprParser) parsePower() (expr, error) {
 	return base, nil
 }
 
+// The positive magnitude of MinInt64 cannot be parsed as a signed integer.
+func isMinInt64Literal(op string, t tok) bool {
+	return op == "-" && t.kind == tokInt && t.val == "9223372036854775808"
+}
+
 func (p *exprParser) parseUnary() (expr, error) {
 	if p.peek().kind == tokOp && (p.peek().val == "-" || p.peek().val == "+") {
 		op := p.advance().val
+		if isMinInt64Literal(op, p.peek()) {
+			p.advance()
+			return &litExpr{val: NewInt(-9223372036854775808)}, nil
+		}
 		operand, err := p.parseUnary()
 		if err != nil {
 			return nil, err
@@ -679,14 +688,20 @@ func (p *exprParser) parseAtom() (expr, error) {
 	// Integer literal.
 	if t.kind == tokInt {
 		p.advance()
-		n, _ := strconv.ParseInt(t.val, 10, 64)
+		n, err := strconv.ParseInt(t.val, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer %q: %w", t.val, err)
+		}
 		return &litExpr{val: NewInt(n)}, nil
 	}
 
 	// Float literal.
 	if t.kind == tokFloat {
 		p.advance()
-		f, _ := strconv.ParseFloat(t.val, 64)
+		f, err := strconv.ParseFloat(t.val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid float %q: %w", t.val, err)
+		}
 		return &litExpr{val: NewFloat(f)}, nil
 	}
 
