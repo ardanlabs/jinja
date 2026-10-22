@@ -1,0 +1,8 @@
+[
+  {
+    "id": "B041-02",
+    "source": "{{ range(9223372036854775805, 9223372036854775807, 3)|list }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 956
+  }
+]

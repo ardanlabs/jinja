@@ -54,6 +54,13 @@ func builtinRaiseException(args []Value, kwargs map[string]Value) (Value, error)
 	return Undefined(), fmt.Errorf("%s", printValue(args[0]))
 }
 
+func rangeStepOverflows(current, step int64) bool {
+	if step > 0 {
+		return current > math.MaxInt64-step
+	}
+	return current < math.MinInt64-step
+}
+
 func builtinRange(args []Value, kwargs map[string]Value) (Value, error) {
 	var start, stop, step int64
 	switch len(args) {
@@ -81,10 +88,16 @@ func builtinRange(args []Value, kwargs map[string]Value) (Value, error) {
 	if step > 0 {
 		for i := start; i < stop; i += step {
 			items = append(items, NewInt(i))
+			if rangeStepOverflows(i, step) {
+				break
+			}
 		}
 	} else {
 		for i := start; i > stop; i += step {
 			items = append(items, NewInt(i))
+			if rangeStepOverflows(i, step) {
+				break
+			}
 		}
 	}
 

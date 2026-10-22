@@ -1,0 +1,8 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B041-02
+    jinjafix_regression_test.go:121: Go: stage=timeout output=""; expected: stage=render output="[9223372036854775805]"; error=context deadline exceeded
+--- FAIL: TestJinjaFixRegression (2.03s)
+    --- FAIL: TestJinjaFixRegression/B041-02 (2.03s)
+FAIL
+FAIL	github.com/ardanlabs/jinja	2.039s
+FAIL
