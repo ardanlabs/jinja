@@ -1198,23 +1198,12 @@ func filterSum(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewInt(0), nil
 	}
 
-	list := args[0].AsList()
-	var sumF float64
-	isFloat := false
+	sum := NewInt(0)
 
-	for _, item := range list.Items {
-		if item.IsFloat() {
-			isFloat = true
-			sumF += item.AsFloat()
-		} else if item.IsInt() {
-			sumF += float64(item.AsInt())
-		}
+	for _, item := range args[0].AsList().Items {
+		sum = addValues(sum, item)
 	}
-
-	if isFloat {
-		return NewFloat(sumF), nil
-	}
-	return NewInt(int64(sumF)), nil
+	return sum, nil
 }
 
 func filterBatch(args []Value, kwargs map[string]Value) (Value, error) {
