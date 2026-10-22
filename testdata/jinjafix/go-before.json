@@ -1,0 +1,22 @@
+[
+  {
+    "id": "B064-01",
+    "stage": "panic",
+    "error": "runtime error: slice bounds out of range [2:1]"
+  },
+  {
+    "id": "B064-02",
+    "stage": "panic",
+    "error": "runtime error: slice bounds out of range [2:1]"
+  },
+  {
+    "id": "B065-01",
+    "stage": "panic",
+    "error": "runtime error: slice bounds out of range [3:2]"
+  },
+  {
+    "id": "B065-02",
+    "stage": "panic",
+    "error": "runtime error: slice bounds out of range [3:2]"
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "base_commit": "b1bf3a06adcade12b59a1dfaa2edef6f4a7d6e09",
+  "selected_fix_commit": "5bebe578b37e036788e6d0115e650681fddbe3a0",
+  "original_branch": "fast-fix-select-arg-panic",
+  "corpus_sha256": "e844754b9724b93fd2fc162d3d756cca40a57d6ed07188b02d02b2bcbe834bb9",
+  "comparison": "Exact successful output; compile/render error stage agreement. Error strings are recorded, not equated.",
+  "previous_test_commit": "ea3969644f184067e534d5c714ed81254ddfe4e6",
+  "previous_fix_commit": "6d04c4cbf738b6084fab3744a69575f92c1d51ea"
+}

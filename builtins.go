@@ -930,7 +930,10 @@ func filterSelect(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = args[1].AsString()
 	}
 
-	testArgs := args[2:]
+	var testArgs []Value
+	if len(args) > 2 {
+		testArgs = args[2:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {
@@ -963,7 +966,10 @@ func filterReject(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = args[1].AsString()
 	}
 
-	testArgs := args[2:]
+	var testArgs []Value
+	if len(args) > 2 {
+		testArgs = args[2:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {
@@ -997,7 +1003,10 @@ func filterSelectattr(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = printValue(args[2])
 	}
 
-	testArgs := args[3:]
+	var testArgs []Value
+	if len(args) > 3 {
+		testArgs = args[3:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {
@@ -1038,7 +1047,10 @@ func filterRejectattr(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = printValue(args[2])
 	}
 
-	testArgs := args[3:]
+	var testArgs []Value
+	if len(args) > 3 {
+		testArgs = args[3:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {

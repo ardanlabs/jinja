@@ -1,0 +1,26 @@
+[
+  {
+    "id": "B064-01",
+    "source": "{{ [0,1,2]|select|list }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1071
+  },
+  {
+    "id": "B064-02",
+    "source": "{{ [0,1,2]|reject|list }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1075
+  },
+  {
+    "id": "B065-01",
+    "source": "{{ [{'enabled':true},{'enabled':false}]|selectattr('enabled')|list|length }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1079
+  },
+  {
+    "id": "B065-02",
+    "source": "{{ [{'enabled':true},{'enabled':false}]|rejectattr('enabled')|list|length }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1083
+  }
+]

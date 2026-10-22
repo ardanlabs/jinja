@@ -1,0 +1,4 @@
+ok  	github.com/ardanlabs/jinja	9.429s
+?   	github.com/ardanlabs/jinja/examples/basic	[no test files]
+?   	github.com/ardanlabs/jinja/examples/chat	[no test files]
+?   	github.com/ardanlabs/jinja/examples/toolcall	[no test files]
