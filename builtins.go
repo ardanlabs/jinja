@@ -1283,9 +1283,50 @@ func toFloat64(v Value) float64 {
 	return 0
 }
 
+func compareIntFloat(i int64, f float64) int {
+	if f >= 0x1p63 {
+		return -1
+	}
+	if f < -0x1p63 {
+		return 1
+	}
+	fi := int64(f)
+	if i < fi {
+		return -1
+	}
+	if i > fi {
+		return 1
+	}
+	if float64(fi) < f {
+		return -1
+	}
+	if float64(fi) > f {
+		return 1
+	}
+	return 0
+}
+
+func isIntegralValue(v Value) bool { return v.IsInt() || v.IsBool() }
+
 func compareValues(a, b Value) int {
-	af := toFloat64(a)
-	bf := toFloat64(b)
+	if isIntegralValue(a) && isIntegralValue(b) {
+		ai, bi := toInt64(a), toInt64(b)
+		if ai < bi {
+			return -1
+		}
+		if ai > bi {
+			return 1
+		}
+		return 0
+	}
+	// Float conversion would discard significant bits of large integers.
+	if isIntegralValue(a) && b.IsFloat() {
+		return compareIntFloat(toInt64(a), b.AsFloat())
+	}
+	if a.IsFloat() && isIntegralValue(b) {
+		return -compareIntFloat(toInt64(b), a.AsFloat())
+	}
+	af, bf := toFloat64(a), toFloat64(b)
 	if af < bf {
 		return -1
 	}
