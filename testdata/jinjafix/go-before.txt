@@ -1,0 +1,26 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B015-01
+    jinjafix_regression_test.go:121: Go: stage=render output="0"; expected: stage=render output="---"; error=
+=== RUN   TestJinjaFixRegression/B015-02
+    jinjafix_regression_test.go:121: Go: stage=panic output=""; expected: stage=render output=""; error=strings: negative Repeat count
+=== RUN   TestJinjaFixRegression/B016-01
+    jinjafix_regression_test.go:121: Go: stage=render output="0"; expected: stage=render output="[1, 0, 1, 0]"; error=
+=== RUN   TestJinjaFixRegression/B016-02
+    jinjafix_regression_test.go:121: Go: stage=render output="0"; expected: stage=render output="[]"; error=
+=== RUN   TestJinjaFixRegression/B017-01
+    jinjafix_regression_test.go:121: Go: stage=panic output=""; expected: stage=render_error output=""; error=strings: Repeat output length overflow
+=== RUN   TestJinjaFixRegression/B017-02
+    jinjafix_regression_test.go:121: Go: stage=render output="0"; expected: stage=render_error output=""; error=
+=== RUN   TestJinjaFixRegression/empty-list-huge-count
+    jinjafix_regression_test.go:121: Go: stage=render output="0"; expected: stage=render output="[]"; error=
+--- FAIL: TestJinjaFixRegression (0.03s)
+    --- FAIL: TestJinjaFixRegression/B015-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B015-02 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B016-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B016-02 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B017-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B017-02 (0.00s)
+    --- FAIL: TestJinjaFixRegression/empty-list-huge-count (0.00s)
+FAIL
+FAIL	github.com/ardanlabs/jinja	0.030s
+FAIL

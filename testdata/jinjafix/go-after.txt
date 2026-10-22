@@ -1,0 +1,18 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B015-01
+=== RUN   TestJinjaFixRegression/B015-02
+=== RUN   TestJinjaFixRegression/B016-01
+=== RUN   TestJinjaFixRegression/B016-02
+=== RUN   TestJinjaFixRegression/B017-01
+=== RUN   TestJinjaFixRegression/B017-02
+=== RUN   TestJinjaFixRegression/empty-list-huge-count
+--- PASS: TestJinjaFixRegression (0.03s)
+    --- PASS: TestJinjaFixRegression/B015-01 (0.01s)
+    --- PASS: TestJinjaFixRegression/B015-02 (0.00s)
+    --- PASS: TestJinjaFixRegression/B016-01 (0.00s)
+    --- PASS: TestJinjaFixRegression/B016-02 (0.00s)
+    --- PASS: TestJinjaFixRegression/B017-01 (0.00s)
+    --- PASS: TestJinjaFixRegression/B017-02 (0.00s)
+    --- PASS: TestJinjaFixRegression/empty-list-huge-count (0.00s)
+PASS
+ok  	github.com/ardanlabs/jinja	0.035s

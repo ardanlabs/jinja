@@ -1,0 +1,43 @@
+[
+  {
+    "id": "B015-01",
+    "source": "{{ 3 * '-' }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 776
+  },
+  {
+    "id": "B015-02",
+    "source": "{{ 'x' * -1 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 780
+  },
+  {
+    "id": "B016-01",
+    "source": "{{ 2 * [1, 0] }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 784
+  },
+  {
+    "id": "B016-02",
+    "source": "{{ [1] * -2 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 788
+  },
+  {
+    "id": "B017-01",
+    "source": "{{ 'NR' * 9223372036854775807 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 792
+  },
+  {
+    "id": "B017-02",
+    "source": "{{ [1, 2] * 9223372036854775807 }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 795
+  },
+  {
+    "id": "empty-list-huge-count",
+    "source": "{{ [] * 9223372036854775807 }}",
+    "origin": "boundary extension of B016 and B017"
+  }
+]
