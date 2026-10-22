@@ -5,6 +5,7 @@ package jinja
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -226,8 +227,50 @@ func (v Value) String() string {
 	return "Undefined"
 }
 
+func isNumericEqualityValue(v Value) bool { return v.IsNumber() || v.IsBool() }
+func isIntegralValue(v Value) bool        { return v.IsInt() || v.IsBool() }
+func isNaNValue(v Value) bool             { return v.IsFloat() && math.IsNaN(v.AsFloat()) }
+
+func compareIntFloat(i int64, f float64) int {
+	if f >= 0x1p63 {
+		return -1
+	}
+	if f < -0x1p63 {
+		return 1
+	}
+	fi := int64(f)
+	if i < fi {
+		return -1
+	}
+	if i > fi {
+		return 1
+	}
+	if float64(fi) < f {
+		return -1
+	}
+	if float64(fi) > f {
+		return 1
+	}
+	return 0
+}
+
 // Equals reports whether v and other hold the same value.
 func (v Value) Equals(other Value) bool {
+	if isNumericEqualityValue(v) && isNumericEqualityValue(other) {
+		if isNaNValue(v) || isNaNValue(other) {
+			return false
+		}
+		if isIntegralValue(v) && isIntegralValue(other) {
+			return toInt64(v) == toInt64(other)
+		}
+		if v.IsFloat() && other.IsFloat() {
+			return v.AsFloat() == other.AsFloat()
+		}
+		if v.IsFloat() {
+			return compareIntFloat(toInt64(other), v.AsFloat()) == 0
+		}
+		return compareIntFloat(toInt64(v), other.AsFloat()) == 0
+	}
 	if v.kind != other.kind {
 		return false
 	}
