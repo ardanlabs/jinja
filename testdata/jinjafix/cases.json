@@ -1,0 +1,14 @@
+[
+  {
+    "id": "B077-01",
+    "source": "{{ ('{\"counter\":9007199254740993}'|fromjson).counter }}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1159
+  },
+  {
+    "id": "B077-02",
+    "source": "{% for k in '{\"upf\":1,\"amf\":2}'|fromjson %}{{ k }};{% endfor %}",
+    "origin": "testdata/provisioning/5g-network.jinja",
+    "source_line": 1163
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "base_commit": "b1bf3a06adcade12b59a1dfaa2edef6f4a7d6e09",
+  "selected_fix_commit": "7c15f58971cfbd74af6b7ab1d3f49d69e5ae5103",
+  "original_branch": "cd-fix-json-decoding",
+  "corpus_sha256": "e844754b9724b93fd2fc162d3d756cca40a57d6ed07188b02d02b2bcbe834bb9",
+  "comparison": "Exact successful output; compile/render error stage agreement. Error strings are recorded, not equated.",
+  "previous_test_commit": "774e2c1d97f351ef8e909dc3612c1c137261b085",
+  "previous_fix_commit": "820f77de317489a87678a16526c26b305049a4d1"
+}

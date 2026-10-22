@@ -1,0 +1,11 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B077-01
+    jinjafix_regression_test.go:121: Go: stage=render output="9.007199254740992e+15"; expected: stage=render output="9007199254740993"; error=
+=== RUN   TestJinjaFixRegression/B077-02
+    jinjafix_regression_test.go:121: Go: stage=render output="amf;upf;"; expected: stage=render output="upf;amf;"; error=
+--- FAIL: TestJinjaFixRegression (0.01s)
+    --- FAIL: TestJinjaFixRegression/B077-01 (0.00s)
+    --- FAIL: TestJinjaFixRegression/B077-02 (0.00s)
+FAIL
+FAIL	github.com/ardanlabs/jinja	0.013s
+FAIL
