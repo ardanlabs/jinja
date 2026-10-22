@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -345,6 +346,12 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 
+	// Like json.dumps, refuse a value that contains itself rather than
+	// encode it forever.
+	if containsItself(args[0], nil) {
+		return Undefined(), fmt.Errorf("tojson: circular reference detected")
+	}
+
 	itemSeparator := ", "
 	keySeparator := ": "
 	if separators, ok := kwargs["separators"]; ok {
@@ -382,6 +389,37 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 	return NewString(sb.String()), nil
+}
+
+// Track only ancestors so shared containers are not mistaken for cycles.
+func containsItself(v Value, outer []any) bool {
+	switch {
+	case v.IsList():
+		list := v.AsList()
+		if slices.Contains(outer, any(list)) {
+			return true
+		}
+		outer = append(outer, list)
+		for _, item := range list.Items {
+			if containsItself(item, outer) {
+				return true
+			}
+		}
+
+	case v.IsDict():
+		d := v.AsDict()
+		if slices.Contains(outer, any(d)) {
+			return true
+		}
+		outer = append(outer, d)
+		for _, key := range d.Keys {
+			if containsItself(d.Data[key], outer) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // encodeValueJSON writes the JSON encoding of v directly into sb without

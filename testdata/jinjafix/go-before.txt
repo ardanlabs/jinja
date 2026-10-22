@@ -1,0 +1,11 @@
+=== RUN   TestJinjaFixRegression
+=== RUN   TestJinjaFixRegression/B058-01
+    jinjafix_regression_test.go:121: Go: stage=process_error output=""; expected: stage=render output="{'name': 'upf', 'parent': {...}}:True"; error=exit status 2
+=== RUN   TestJinjaFixRegression/B059-01
+    jinjafix_regression_test.go:121: Go: stage=process_error output=""; expected: stage=render_error output=""; error=exit status 2
+--- FAIL: TestJinjaFixRegression (0.04s)
+    --- FAIL: TestJinjaFixRegression/B058-01 (0.02s)
+    --- FAIL: TestJinjaFixRegression/B059-01 (0.02s)
+FAIL
+FAIL	github.com/ardanlabs/jinja	0.041s
+FAIL
