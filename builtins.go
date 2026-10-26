@@ -110,6 +110,17 @@ func builtinJoiner(args []Value, kwargs map[string]Value) (Value, error) {
 func builtinDict(args []Value, kwargs map[string]Value) (Value, error) {
 	d := NewDict()
 	dict := d.AsDict()
+	if len(args) > 1 {
+		return Undefined(), fmt.Errorf("dict: expected at most one positional argument")
+	}
+	if len(args) == 1 {
+		if !args[0].IsDict() {
+			return Undefined(), fmt.Errorf("dict: positional argument must be a mapping")
+		}
+		for _, key := range args[0].AsDict().Keys {
+			dict.Set(key, args[0].AsDict().Data[key])
+		}
+	}
 	for k, v := range kwargs {
 		dict.Set(k, v)
 	}
@@ -736,8 +747,22 @@ func filterSort(args []Value, kwargs map[string]Value) (Value, error) {
 		reverse = r.AsBool()
 	}
 
+	attribute := ""
+	if a, ok := kwargs["attribute"]; ok {
+		attribute = printValue(a)
+	}
+
 	sort.SliceStable(items, func(i, j int) bool {
-		cmp := compareValues(items[i], items[j])
+		left, right := items[i], items[j]
+		if attribute != "" {
+			if left.IsDict() {
+				left, _ = left.AsDict().Get(attribute)
+			}
+			if right.IsDict() {
+				right, _ = right.AsDict().Get(attribute)
+			}
+		}
+		cmp := compareValues(left, right)
 		if reverse {
 			return cmp > 0
 		}

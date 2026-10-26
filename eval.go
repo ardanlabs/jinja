@@ -369,13 +369,15 @@ func (e *evaluator) execCall(n *callNode) error {
 			args = append(args, av)
 		}
 
-		kwargs := map[string]Value{"caller": caller}
-		for _, kw := range callEx.kwargs {
-			v, err := e.evalExpr(kw.value)
-			if err != nil {
-				return err
-			}
-			kwargs[kw.name] = v
+		kwargs, err := e.evalKeywordArgs(callEx.kwargs)
+		if err != nil {
+			return err
+		}
+		if kwargs == nil {
+			kwargs = make(map[string]Value)
+		}
+		if _, ok := kwargs["caller"]; !ok {
+			kwargs["caller"] = caller
 		}
 
 		result, err := fn.AsCallable().Fn(args, kwargs)
@@ -889,19 +891,42 @@ func (e *evaluator) evalCallExpr(n *callExpr) (Value, error) {
 		args[i] = v
 	}
 
-	var kwargs map[string]Value
-	if len(n.kwargs) > 0 {
-		kwargs = make(map[string]Value, len(n.kwargs))
-		for _, kw := range n.kwargs {
-			v, err := e.evalExpr(kw.value)
-			if err != nil {
-				return Undefined(), err
-			}
-			kwargs[kw.name] = v
-		}
+	kwargs, err := e.evalKeywordArgs(n.kwargs)
+	if err != nil {
+		return Undefined(), err
 	}
 
 	return fn.AsCallable().Fn(args, kwargs)
+}
+
+func (e *evaluator) evalKeywordArgs(keywords []kwarg) (map[string]Value, error) {
+	if len(keywords) == 0 {
+		return nil, nil
+	}
+	kwargs := make(map[string]Value, len(keywords))
+	for _, kw := range keywords {
+		v, err := e.evalExpr(kw.value)
+		if err != nil {
+			return nil, err
+		}
+		if kw.name != "" {
+			if _, exists := kwargs[kw.name]; exists {
+				return nil, fmt.Errorf("duplicate keyword argument: %s", kw.name)
+			}
+			kwargs[kw.name] = v
+			continue
+		}
+		if !v.IsDict() {
+			return nil, fmt.Errorf("keyword argument expansion requires a mapping")
+		}
+		for _, key := range v.AsDict().Keys {
+			if _, exists := kwargs[key]; exists {
+				return nil, fmt.Errorf("duplicate keyword argument: %s", key)
+			}
+			kwargs[key] = v.AsDict().Data[key]
+		}
+	}
+	return kwargs, nil
 }
 
 func callableName(ex expr) string {
@@ -951,16 +976,9 @@ func (e *evaluator) evalFilter(n *filterExpr) (Value, error) {
 		args[i+1] = v
 	}
 
-	var kwargs map[string]Value
-	if len(n.kwargs) > 0 {
-		kwargs = make(map[string]Value, len(n.kwargs))
-		for _, kw := range n.kwargs {
-			v, err := e.evalExpr(kw.value)
-			if err != nil {
-				return Undefined(), err
-			}
-			kwargs[kw.name] = v
-		}
+	kwargs, err := e.evalKeywordArgs(n.kwargs)
+	if err != nil {
+		return Undefined(), err
 	}
 
 	return filterVal.AsCallable().Fn(args, kwargs)

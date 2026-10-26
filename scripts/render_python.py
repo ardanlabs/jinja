@@ -166,6 +166,7 @@ def main() -> int:
         tpl_src = tpl_path.read_text()
         for req_name, req in parsed_requests.items():
             ctx = build_context(req)
+            ctx.update(req.get("chat_template_kwargs", {}).get(tpl_name, {}))
             out[f"{tpl_name}/{req_name}"] = render_one(env, tpl_src, ctx)
 
     json.dump(out, sys.stdout)
