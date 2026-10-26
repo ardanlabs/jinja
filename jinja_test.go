@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -318,6 +319,74 @@ func TestRangeIntegerBoundaries(t *testing.T) {
 				t.Fatalf("compile: %v", err)
 			}
 			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCircularValues(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		source  string
+		want    string
+		wantErr bool
+	}{
+		{"recursive dictionary", `{% set d = {'name': 'upf'} %}{% set ignored = d.update({'parent': d}) %}{{ d }}`, "{'name': 'upf', 'parent': {...}}", false},
+		{"recursive list", `{% set a = [] %}{% set ignored = a.append(a) %}{{ a }}`, "[[...]]", false},
+		{"dictionary list cycle", `{% set d = {} %}{% set a = [d] %}{% set ignored = d.update({'items': a}) %}{{ d }}`, "{'items': [{...}]}", false},
+		{"dictionary self equality", `{% set d = {} %}{% set ignored = d.update({'self': d}) %}{{ d == d }}`, "True", false},
+		{"list self equality", `{% set a = [] %}{% set ignored = a.append(a) %}{{ a == a }}`, "True", false},
+		{"circular dictionary json", `{% set d = {} %}{% set ignored = d.update({'self': d}) %}{{ d | tojson }}`, "", true},
+		{"circular list json", `{% set a = [] %}{% set ignored = a.append(a) %}{{ a | tojson }}`, "", true},
+		{"mixed cycle json", `{% set d = {} %}{% set a = [d] %}{% set ignored = d.update({'items': a}) %}{{ a | tojson }}`, "", true},
+		{"indented circular json", `{% set d = {} %}{% set ignored = d.update({'self': d}) %}{{ d | tojson(indent=2) }}`, "", true},
+		{"shared references render", `{% set d = {'n': 1} %}{% set a = [d] %}{{ [a, a, d] }}`, "[[{'n': 1}], [{'n': 1}], {'n': 1}]", false},
+		{"shared references json", `{% set d = {'n': 1} %}{% set a = [d] %}{{ [a, a, d] | tojson }}`, `[[{"n": 1}], [{"n": 1}], {"n": 1}]`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Stack overflow is fatal, not a recoverable panic. Keep broken
+			// renders in child processes with bounded stack growth and runtime.
+			if os.Getenv("JINJA_CIRCULAR_WORKER") != "1" {
+				executable, err := os.Executable()
+				if err != nil {
+					t.Fatalf("test executable: %v", err)
+				}
+				t.Setenv("JINJA_CIRCULAR_WORKER", "1")
+				t.Setenv("GOTRACEBACK", "none")
+				ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+				defer cancel()
+				pattern := "^TestCircularValues$/^" + strings.ReplaceAll(tc.name, " ", "_") + "$"
+				cmd := exec.CommandContext(ctx, executable, "-test.run="+pattern)
+				output, err := cmd.CombinedOutput()
+				if ctx.Err() != nil {
+					t.Fatal("render did not finish within 2 seconds")
+				}
+				if err != nil {
+					// Fatal stack overflows print huge traces even with
+					// GOTRACEBACK=none. Keep the diagnostic's leading bytes.
+					t.Fatalf("render subprocess: %v\n%.512s", err, output)
+				}
+				return
+			}
+
+			previous := debug.SetMaxStack(2 << 20)
+			defer debug.SetMaxStack(previous)
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("render: got no error, want error for circular JSON")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("render: %v", err)
 			}

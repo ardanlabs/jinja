@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -171,6 +172,11 @@ func (v Value) AsCallable() *Callable {
 
 // String returns a Python-style string representation of the value.
 func (v Value) String() string {
+	return v.string(nil)
+}
+
+// Track ancestors, not all visited containers: shared references are not cycles.
+func (v Value) string(ancestors []any) string {
 	switch v.kind {
 	case KindUndefined:
 		return "Undefined"
@@ -195,26 +201,34 @@ func (v Value) String() string {
 
 	case KindList:
 		list := v.v.(*List)
+		if slices.Contains(ancestors, any(list)) {
+			return "[...]"
+		}
+		ancestors = append(ancestors, list)
 		var b strings.Builder
 		b.WriteByte('[')
 		for i, item := range list.Items {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(item.String())
+			b.WriteString(item.string(ancestors))
 		}
 		b.WriteByte(']')
 		return b.String()
 
 	case KindDict:
 		d := v.v.(*Dict)
+		if slices.Contains(ancestors, any(d)) {
+			return "{...}"
+		}
+		ancestors = append(ancestors, d)
 		var b strings.Builder
 		b.WriteByte('{')
 		for i, key := range d.Keys {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			fmt.Fprintf(&b, "'%s': %s", key, d.Data[key].String())
+			fmt.Fprintf(&b, "'%s': %s", key, d.Data[key].string(ancestors))
 		}
 		b.WriteByte('}')
 		return b.String()
@@ -268,6 +282,9 @@ func (v Value) Equals(other Value) bool {
 	case KindList:
 		a := v.v.(*List)
 		b := other.v.(*List)
+		if a == b {
+			return true
+		}
 		if a.Len() != b.Len() {
 			return false
 		}
@@ -281,6 +298,9 @@ func (v Value) Equals(other Value) bool {
 	case KindDict:
 		a := v.v.(*Dict)
 		b := other.v.(*Dict)
+		if a == b {
+			return true
+		}
 		if a.Len() != b.Len() {
 			return false
 		}

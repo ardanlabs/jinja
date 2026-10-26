@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -375,6 +376,11 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 
+	// Check both encoding paths before recursively converting containers.
+	if containsCycle(args[0], nil) {
+		return Undefined(), fmt.Errorf("tojson: circular reference detected")
+	}
+
 	itemSeparator := ", "
 	keySeparator := ": "
 	if separators, ok := kwargs["separators"]; ok {
@@ -412,6 +418,36 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 	return NewString(sb.String()), nil
+}
+
+// Only references to ancestors form cycles; siblings may share a container.
+func containsCycle(v Value, ancestors []any) bool {
+	switch v.kind {
+	case KindList:
+		list := v.AsList()
+		if slices.Contains(ancestors, any(list)) {
+			return true
+		}
+		ancestors = append(ancestors, list)
+		for _, item := range list.Items {
+			if containsCycle(item, ancestors) {
+				return true
+			}
+		}
+
+	case KindDict:
+		d := v.AsDict()
+		if slices.Contains(ancestors, any(d)) {
+			return true
+		}
+		ancestors = append(ancestors, d)
+		for _, key := range d.Keys {
+			if containsCycle(d.Data[key], ancestors) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // encodeValueJSON writes the JSON encoding of v directly into sb without
