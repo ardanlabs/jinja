@@ -1,12 +1,18 @@
 package jinja_test
 
 import (
+	"context"
 	"fmt"
 	"maps"
+	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
+	"time"
+	"unsafe"
 
 	"github.com/ardanlabs/jinja"
 )
@@ -30,6 +36,413 @@ func TestBasicRender(t *testing.T) {
 
 	if result != "Hello World!" {
 		t.Errorf("expected 'Hello World!', got %q", result)
+	}
+}
+
+func TestNumericEquality(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"distinct large integers", `{{ 9007199254740992 == 9007199254740993 }}`, "False"},
+		{"large integer and rounded float", `{{ 9007199254740993 == 9007199254740992.0 }}`, "False"},
+		{"large integer inequality", `{{ 9007199254740992 != 9007199254740993 }}`, "True"},
+		{"equal integer and float", `{{ 1 == 1.0 }}`, "True"},
+		{"nested numeric equality", `{{ [{'qfi': 1}] == [{'qfi': 1.0}] }}`, "True"},
+		{"numeric membership", `{{ 1.0 in [1] }}`, "True"},
+		{"boolean numeric equality", `{{ true == 1 }}`, "True"},
+		{"equalto numeric equality", `{{ 1 is equalto(1.0) }}`, "True"},
+		{"float before integer", `{{ 1.0 == 1 }}`, "True"},
+		{"fractional float", `{{ -1 == -1.5 }}`, "False"},
+		{"minimum integer and float", `{{ min_int == -9223372036854775808.0 }}`, "True"},
+		{"float above integer range", `{{ min_int == 9223372036854775808.0 }}`, "False"},
+		{"float below integer range", `{{ min_int == -9223372036854777856.0 }}`, "False"},
+		{"maximum integer and rounded float", `{{ 9223372036854775807 == 9223372036854775808.0 }}`, "False"},
+		{"integer and nan", `{{ min_int == nan }}`, "False"},
+		{"nan and itself", `{{ nan == nan }}`, "False"},
+		{"integer and infinity", `{{ min_int == inf }}`, "False"},
+		{"float infinity", `{{ inf == inf }}`, "True"},
+		// sameas tests identity, not numeric equality.
+		{"integer and float are not identical", `{{ 1 is sameas(1.0) }}`, "False"},
+		{"true and integer are not identical", `{{ true is sameas(1) }}`, "False"},
+		{"false and float are not identical", `{{ false is sameas(0.0) }}`, "False"},
+		{"equal lists are not identical", `{{ [1] is sameas([1.0]) }}`, "False"},
+		{"equal dictionaries are not identical", `{{ {'qfi': 1} is sameas({'qfi': 1.0}) }}`, "False"},
+		{"list identity", `{% set a = [1] %}{{ a is sameas(a) }}`, "True"},
+		{"dictionary identity", `{% set a = {'qfi': 1} %}{{ a is sameas(a) }}`, "True"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(map[string]any{
+				"min_int": int64(math.MinInt64),
+				"nan":     math.NaN(),
+				"inf":     math.Inf(1),
+			})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNumericOrdering(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"distinct large integers", `{{ 9007199254740992 < 9007199254740993 }}`, "True"},
+		{"large integer and rounded float", `{{ 9007199254740993 > 9007199254740992.0 }}`, "True"},
+		{"float before large integer", `{{ 9007199254740992.0 < 9007199254740993 }}`, "True"},
+		{"negative large integer", `{{ -9007199254740993 < -9007199254740992.0 }}`, "True"},
+		{"non-strict large integer comparisons", `{{ 9007199254740993 <= 9007199254740992 }}|{{ 9007199254740992 >= 9007199254740993 }}`, "False|False"},
+		{"fractional comparisons", `{{ -1 > -1.5 }}|{{ -1 < -0.5 }}|{{ 1 < 1.5 }}|{{ 1.5 > 1 }}`, "True|True|True|True"},
+		{"integer boundaries", `{{ max_int < 9223372036854775808.0 }}|{{ min_int >= -9223372036854775808.0 }}|{{ min_int > -9223372036854777856.0 }}`, "True|True|True"},
+		{"sort large integers", `{{ [9007199254740993, 9007199254740992] | sort }}`, "[9007199254740992, 9007199254740993]"},
+		{"reverse sort large integers", `{{ [9007199254740992, 9007199254740993] | sort(reverse=true) }}`, "[9007199254740993, 9007199254740992]"},
+		{"minimum large integer", `{{ [9007199254740993, 9007199254740992] | min }}`, "9007199254740992"},
+		{"maximum large integer", `{{ [9007199254740992, 9007199254740993] | max }}`, "9007199254740993"},
+		{"ordering tests", `{{ 9007199254740993 is gt(9007199254740992) }}|{{ 9007199254740992 is lt(9007199254740993) }}|{{ 9007199254740993 is le(9007199254740992) }}|{{ 9007199254740992 is ge(9007199254740993) }}`, "True|True|False|False"},
+		{"nan on right", `{{ 1 < nan }}|{{ 1 > nan }}|{{ 1 <= nan }}|{{ 1 >= nan }}`, "False|False|False|False"},
+		{"nan on left", `{{ nan < 1 }}|{{ nan > 1 }}|{{ nan <= 1 }}|{{ nan >= 1 }}`, "False|False|False|False"},
+		{"float nan comparisons", `{{ 1.5 < nan }}|{{ nan > 1.5 }}|{{ nan <= nan }}|{{ nan >= nan }}`, "False|False|False|False"},
+		{"nan ordering tests", `{{ 1 is gt(nan) }}|{{ nan is lt(1) }}|{{ 1 is le(nan) }}|{{ nan is ge(1) }}`, "False|False|False|False"},
+		{"equal numeric values remain ordered", `{{ 1 <= 1.0 }}|{{ 1.0 >= 1 }}|{{ 1 < 1.0 }}|{{ 1.0 > 1 }}`, "True|True|False|False"},
+		{"boolean numeric ordering", `{{ false < 0.5 }}|{{ 0.5 < true }}|{{ true >= 1 }}|{{ 0 <= false }}`, "True|True|True|True"},
+		{"infinities", `{{ max_int < inf }}|{{ min_int > -inf }}`, "True|True"},
+		{"small numeric and string controls", `{{ 2 < 3 }}|{{ 3.5 > 2.5 }}|{{ false < true }}|{{ 'apple' < 'banana' }}`, "True|True|True|True"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(map[string]any{
+				"min_int": int64(math.MinInt64),
+				"max_int": int64(math.MaxInt64),
+				"nan":     math.NaN(),
+				"inf":     math.Inf(1),
+			})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNumericLiterals(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		source         string
+		want           string
+		wantCompileErr bool
+	}{
+		{"malformed exponent", `{{ 1.2e+ }}`, "", true},
+		{"oversized integer", `{{ 999999999999999999999999 }}`, "", true},
+		{"integer above supported range", `{{ 9223372036854775808 }}`, "", true},
+		{"integer below supported range", `{{ -9223372036854775809 }}`, "", true},
+		{"float overflow", `{{ 1.0e400 }}`, "", true},
+		{"minimum integer", `{{ -9223372036854775808 }}`, "-9223372036854775808", false},
+		{"minimum integer with filter", `{{ -9223372036854775808 | int }}`, "-9223372036854775808", false},
+		{"parenthesized minimum integer with filter", `{{ (-9223372036854775808) | int }}`, "-9223372036854775808", false},
+		{"minimum integer with chained filters", `{{ -9223372036854775808 | string | length }}`, "20", false},
+		{"maximum integer", `{{ 9223372036854775807 }}`, "9223372036854775807", false},
+		{"valid exponent", `{{ 1.25e+2 == 125.0 }}`, "True", false},
+		{"small negative integer with filter", `{{ -42 | int }}`, "-42", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if tc.wantCompileErr {
+				if err == nil {
+					t.Fatal("compile: got no error, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSumFilter(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"large positive integers", `{{ [9007199254740993, 2] | sum }}`, "9007199254740995"},
+		{"large negative integers", `{{ [-9007199254740993, -2] | sum }}`, "-9007199254740995"},
+		{"integer cancellation", `{{ [9007199254740993, -9007199254740992] | sum }}`, "1"},
+		{"maximum integer", `{{ [9223372036854775807] | sum }}`, "9223372036854775807"},
+		{"minimum integer", `{{ [-9223372036854775808] | sum }}`, "-9223372036854775808"},
+		{"ordinary integers", `{{ [2, -3, 8] | sum }}`, "7"},
+		{"empty list", `{{ [] | sum }}`, "0"},
+		{"floats", `{{ [1.25, 2.5] | sum }}`, "3.75"},
+		{"mixed numeric types", `{{ [2, 0.5, 3] | sum }}`, "5.5"},
+		{"integer cancellation before float", `{{ [9007199254740993, -9007199254740992, 0.5] | sum }}`, "1.5"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSelectionFilters(t *testing.T) {
+	rows := []map[string]any{
+		{"id": 1, "enabled": true},
+		{"id": 2, "enabled": false},
+		{"id": 3},
+	}
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"select default", `{{ [0, 1, 2] | select | list }}`, "[1, 2]"},
+		{"reject default", `{{ [0, 1, 2] | reject | list }}`, "[0]"},
+		{"selectattr default", `{{ rows | selectattr('enabled') | map(attribute='id') | list }}`, "[1]"},
+		{"rejectattr default", `{{ rows | rejectattr('enabled') | map(attribute='id') | list }}`, "[2, 3]"},
+		{"select empty", `{{ [] | select | list }}`, "[]"},
+		{"reject empty", `{{ [] | reject | list }}`, "[]"},
+		{"selectattr empty", `{{ [] | selectattr('enabled') | list }}`, "[]"},
+		{"rejectattr empty", `{{ [] | rejectattr('enabled') | list }}`, "[]"},
+		{"select explicit test", `{{ [0, 1, 2] | select('odd') | list }}`, "[1]"},
+		{"reject explicit test", `{{ [0, 1, 2] | reject('odd') | list }}`, "[0, 2]"},
+		{"selectattr explicit test", `{{ rows | selectattr('enabled', 'defined') | map(attribute='id') | list }}`, "[1, 2]"},
+		{"rejectattr explicit test", `{{ rows | rejectattr('enabled', 'defined') | map(attribute='id') | list }}`, "[3]"},
+		{"select test argument", `{{ [0, 1, 2] | select('equalto', 2) | list }}`, "[2]"},
+		{"reject test argument", `{{ [0, 1, 2] | reject('equalto', 2) | list }}`, "[0, 1]"},
+		{"selectattr test argument", `{{ rows | selectattr('enabled', 'equalto', false) | map(attribute='id') | list }}`, "[2]"},
+		{"rejectattr test argument", `{{ rows | rejectattr('enabled', 'equalto', false) | map(attribute='id') | list }}`, "[1, 3]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			defer func() {
+				if p := recover(); p != nil {
+					t.Fatalf("render: unexpected panic: %v", p)
+				}
+			}()
+			got, err := tmpl.Render(map[string]any{"rows": rows})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSequenceRepetition(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		source  string
+		want    string
+		wantErr bool
+	}{
+		{"string repetition", `{{ 'ab' * 3 }}`, "ababab", false},
+		{"reversed string operands", `{{ 3 * '-' }}`, "---", false},
+		{"negative string count", `{{ 'x' * -1 }}`, "", false},
+		{"list repetition", `{{ [1, 0] * 2 }}`, "[1, 0, 1, 0]", false},
+		{"reversed list operands", `{{ 2 * [1, 0] }}`, "[1, 0, 1, 0]", false},
+		{"negative list count", `{{ [1] * -2 }}`, "[]", false},
+		{"zero counts", `{{ 'x' * 0 }}|{{ [1] * 0 }}`, "|[]", false},
+		{"boolean counts", `{{ 'x' * true }}|{{ false * [1] }}`, "x|[]", false},
+		{"unicode repetition", `{{ 3 * 'é' }}`, "ééé", false},
+		{"empty list copy independence", `{% set a = [] %}{% set b = a * 3 %}{% set ignored = b.append(1) %}{{ a }}|{{ b }}`, "[]|[1]", false},
+		{"nonempty list copy independence", `{% set a = [2] %}{% set b = a * 2 %}{% set ignored = b.append(1) %}{{ a }}|{{ b }}`, "[2]|[2, 2, 1]", false},
+		{"zero count copy independence", `{% set a = [2] %}{% set b = a * 0 %}{% set ignored = b.append(1) %}{{ a }}|{{ b }}`, "[2]|[1]", false},
+		{"nested elements remain shared", `{% set a = [[]] %}{% set b = a * 2 %}{% set ignored = b[0].append(7) %}{{ a }}|{{ b }}`, "[[7]]|[[7], [7]]", false},
+		{"empty string huge count", `{{ '' * 9223372036854775807 }}`, "", false},
+		{"empty list huge count", `{{ [] * 9223372036854775807 }}`, "[]", false},
+		{"string size overflow", `{{ 'NR' * 9223372036854775807 }}`, "", true},
+		{"list size overflow", `{{ 9223372036854775807 * [1, 2] }}`, "", true},
+		{"string allocation budget", `{{ 'x' * 67108865 }}`, "", true},
+		{"list allocation budget", `{{ [1] * oversized_list_count }}`, "", true},
+		{"numeric multiplication unchanged", `{{ 3 * 4 }}|{{ 2.5 * 4 == 10.0 }}`, "12|True", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			// Report a rendering panic as a failure without aborting other cases.
+			defer func() {
+				if p := recover(); p != nil {
+					t.Fatalf("render: unexpected panic: %v", p)
+				}
+			}()
+			got, err := tmpl.Render(map[string]any{
+				"oversized_list_count": int64((64<<20)/unsafe.Sizeof(jinja.Value{})) + 1,
+			})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("render: got no error, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRangeIntegerBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"positive overflow", `{{ range(9223372036854775805, 9223372036854775807, 3) | list }}`, "[9223372036854775805]"},
+		{"negative overflow", `{{ range(-9223372036854775806, -9223372036854775808, -3) | list }}`, "[-9223372036854775806]"},
+		{"maximum positive step", `{{ range(1, 2, 9223372036854775807) | list }}`, "[1]"},
+		{"large negative step", `{{ range(-2, -3, -9223372036854775807) | list }}`, "[-2]"},
+		{"minimum negative step", `{{ range(9223372036854775807, -9223372036854775808, -9223372036854775808) | list }}`, "[9223372036854775807, -1]"},
+		{"positive exact stop", `{{ range(9223372036854775803, 9223372036854775807, 2) | list }}`, "[9223372036854775803, 9223372036854775805]"},
+		{"negative exact stop", `{{ range(-9223372036854775804, -9223372036854775808, -2) | list }}`, "[-9223372036854775804, -9223372036854775806]"},
+		{"positive empty range", `{{ range(9223372036854775807, 9223372036854775805, 3) | list }}`, "[]"},
+		{"negative empty range", `{{ range(-9223372036854775808, -9223372036854775806, -3) | list }}`, "[]"},
+		{"ordinary range", `{{ range(2, 9, 3) | list }}`, "[2, 5, 8]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Isolate runaway allocation from a wrapped counter. A goroutine
+			// timeout would leave the broken render running in this process.
+			if os.Getenv("JINJA_RANGE_WORKER") != "1" {
+				executable, err := os.Executable()
+				if err != nil {
+					t.Fatalf("test executable: %v", err)
+				}
+				t.Setenv("JINJA_RANGE_WORKER", "1")
+				t.Setenv("GOMEMLIMIT", "16MiB")
+				ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+				defer cancel()
+				pattern := "^TestRangeIntegerBoundaries$/^" + strings.ReplaceAll(tc.name, " ", "_") + "$"
+				cmd := exec.CommandContext(ctx, executable, "-test.run="+pattern)
+				output, err := cmd.CombinedOutput()
+				if ctx.Err() != nil {
+					t.Fatalf("render did not finish within 2 seconds; want %q", tc.want)
+				}
+				if err != nil {
+					t.Fatalf("render subprocess: %v\n%s", err, output)
+				}
+				return
+			}
+
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCircularValues(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		source  string
+		want    string
+		wantErr bool
+	}{
+		{"recursive dictionary", `{% set d = {'name': 'upf'} %}{% set ignored = d.update({'parent': d}) %}{{ d }}`, "{'name': 'upf', 'parent': {...}}", false},
+		{"recursive list", `{% set a = [] %}{% set ignored = a.append(a) %}{{ a }}`, "[[...]]", false},
+		{"dictionary list cycle", `{% set d = {} %}{% set a = [d] %}{% set ignored = d.update({'items': a}) %}{{ d }}`, "{'items': [{...}]}", false},
+		{"dictionary self equality", `{% set d = {} %}{% set ignored = d.update({'self': d}) %}{{ d == d }}`, "True", false},
+		{"list self equality", `{% set a = [] %}{% set ignored = a.append(a) %}{{ a == a }}`, "True", false},
+		{"circular dictionary json", `{% set d = {} %}{% set ignored = d.update({'self': d}) %}{{ d | tojson }}`, "", true},
+		{"circular list json", `{% set a = [] %}{% set ignored = a.append(a) %}{{ a | tojson }}`, "", true},
+		{"mixed cycle json", `{% set d = {} %}{% set a = [d] %}{% set ignored = d.update({'items': a}) %}{{ a | tojson }}`, "", true},
+		{"indented circular json", `{% set d = {} %}{% set ignored = d.update({'self': d}) %}{{ d | tojson(indent=2) }}`, "", true},
+		{"shared references render", `{% set d = {'n': 1} %}{% set a = [d] %}{{ [a, a, d] }}`, "[[{'n': 1}], [{'n': 1}], {'n': 1}]", false},
+		{"shared references json", `{% set d = {'n': 1} %}{% set a = [d] %}{{ [a, a, d] | tojson }}`, `[[{"n": 1}], [{"n": 1}], {"n": 1}]`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Stack overflow is fatal, not a recoverable panic. Keep broken
+			// renders in child processes with bounded stack growth and runtime.
+			if os.Getenv("JINJA_CIRCULAR_WORKER") != "1" {
+				executable, err := os.Executable()
+				if err != nil {
+					t.Fatalf("test executable: %v", err)
+				}
+				t.Setenv("JINJA_CIRCULAR_WORKER", "1")
+				t.Setenv("GOTRACEBACK", "none")
+				ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+				defer cancel()
+				pattern := "^TestCircularValues$/^" + strings.ReplaceAll(tc.name, " ", "_") + "$"
+				cmd := exec.CommandContext(ctx, executable, "-test.run="+pattern)
+				output, err := cmd.CombinedOutput()
+				if ctx.Err() != nil {
+					t.Fatal("render did not finish within 2 seconds")
+				}
+				if err != nil {
+					// Fatal stack overflows print huge traces even with
+					// GOTRACEBACK=none. Keep the diagnostic's leading bytes.
+					t.Fatalf("render subprocess: %v\n%.512s", err, output)
+				}
+				return
+			}
+
+			previous := debug.SetMaxStack(2 << 20)
+			defer debug.SetMaxStack(previous)
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("render: got no error, want error for circular JSON")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -134,21 +547,117 @@ func TestListFilter(t *testing.T) {
 }
 
 func TestFromJSONFilter(t *testing.T) {
-	source := `{%- set data = data | from_json -%}{{ data.name }}:{{ data.value }}`
-	tmpl, err := jinja.Compile(source)
-	if err != nil {
-		t.Fatalf("compile: %v", err)
-	}
-
-	result, err := tmpl.Render(map[string]any{
-		"data": `{"name":"test","value":42}`,
-	})
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
-
-	if result != "test:42" {
-		t.Errorf("got %q, want %q", result, "test:42")
+	for _, tc := range []struct {
+		name    string
+		source  string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:   "from_json alias",
+			source: `{% set config = data | from_json %}{{ config.name }}:{{ config.value }}`,
+			input:  `{"name":"test","value":42}`,
+			want:   "test:42",
+		},
+		{
+			name:   "large integer precision and type",
+			source: `{{ (data | fromjson).id }}:{{ (data | fromjson).id is integer }}`,
+			input:  `{"id":9007199254740993}`,
+			want:   "9007199254740993:True",
+		},
+		{
+			name:   "nested large integer with alias",
+			source: `{{ (data | from_json)[0].id }}`,
+			input:  `[{"id":9007199254740993}]`,
+			want:   "9007199254740993",
+		},
+		{
+			name:   "object key order",
+			source: `{% for key in data | fromjson %}{{ key }};{% endfor %}`,
+			input:  `{"upf":1,"amf":2}`,
+			want:   "upf;amf;",
+		},
+		{
+			name:   "nested object key order",
+			source: `{% for key in (data | fromjson)[0] %}{{ key }};{% endfor %}`,
+			input:  `[{"z":1,"a":2}]`,
+			want:   "z;a;",
+		},
+		{
+			name:   "float type preserved",
+			source: `{{ (data | fromjson) is float }}`,
+			input:  `1.0`,
+			want:   "True",
+		},
+		{
+			name:   "integer boundaries",
+			source: `{{ data | fromjson | tojson }}`,
+			input:  `[-9223372036854775808,9223372036854775807]`,
+			want:   "[-9223372036854775808, 9223372036854775807]",
+		},
+		{
+			name:    "integer above supported range rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `9223372036854775808`,
+			wantErr: true,
+		},
+		{
+			name:    "integer below supported range rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `-9223372036854775809`,
+			wantErr: true,
+		},
+		{
+			name:   "duplicate key keeps its first position and last value",
+			source: `{% set config = data | fromjson %}{% for key in config %}{{ key }}={{ config[key] }};{% endfor %}`,
+			input:  `{"z":1,"a":2,"z":3}`,
+			want:   "z=3;a=2;",
+		},
+		{
+			name:   "scalars and empty containers",
+			source: `{{ data | fromjson | tojson }}`,
+			input:  `[null,true,false,"text",{},[]]`,
+			want:   `[null, true, false, "text", {}, []]`,
+		},
+		{
+			name:    "numeric overflow is an error, not a string",
+			source:  `{{ data | fromjson | tojson }}`,
+			input:   `{"id":1e400}`,
+			wantErr: true,
+		},
+		{
+			name:    "trailing data rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `{} {}`,
+			wantErr: true,
+		},
+		{
+			name:    "malformed JSON rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `{"id":[1}`,
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(map[string]any{"data": tc.input})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("render: got %q without error, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

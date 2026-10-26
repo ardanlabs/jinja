@@ -5,7 +5,9 @@ package jinja
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -170,6 +172,11 @@ func (v Value) AsCallable() *Callable {
 
 // String returns a Python-style string representation of the value.
 func (v Value) String() string {
+	return v.string(nil)
+}
+
+// Track ancestors, not all visited containers: shared references are not cycles.
+func (v Value) string(ancestors []any) string {
 	switch v.kind {
 	case KindUndefined:
 		return "Undefined"
@@ -194,26 +201,34 @@ func (v Value) String() string {
 
 	case KindList:
 		list := v.v.(*List)
+		if slices.Contains(ancestors, any(list)) {
+			return "[...]"
+		}
+		ancestors = append(ancestors, list)
 		var b strings.Builder
 		b.WriteByte('[')
 		for i, item := range list.Items {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(item.String())
+			b.WriteString(item.string(ancestors))
 		}
 		b.WriteByte(']')
 		return b.String()
 
 	case KindDict:
 		d := v.v.(*Dict)
+		if slices.Contains(ancestors, any(d)) {
+			return "{...}"
+		}
+		ancestors = append(ancestors, d)
 		var b strings.Builder
 		b.WriteByte('{')
 		for i, key := range d.Keys {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			fmt.Fprintf(&b, "'%s': %s", key, d.Data[key].String())
+			fmt.Fprintf(&b, "'%s': %s", key, d.Data[key].string(ancestors))
 		}
 		b.WriteByte('}')
 		return b.String()
@@ -226,10 +241,26 @@ func (v Value) String() string {
 	return "Undefined"
 }
 
-// Equals reports whether v and other hold the same value.
+// Equals reports whether v and other hold the same value. Numeric values
+// compare across integer, float, and boolean types without rounding integers.
 func (v Value) Equals(other Value) bool {
 	if v.kind != other.kind {
-		return false
+		if !(v.IsNumber() || v.IsBool()) || !(other.IsNumber() || other.IsBool()) {
+			return false
+		}
+
+		// Put a mixed comparison's float on the right.
+		if v.IsFloat() {
+			v, other = other, v
+		}
+		if other.IsFloat() {
+			f := other.AsFloat()
+			// Convert only integral floats in the int64 range. These bounds
+			// also reject infinities and NaN without converting them.
+			return f >= -0x1p63 && f < 0x1p63 && math.Trunc(f) == f && toInt64(v) == int64(f)
+		}
+
+		return toInt64(v) == toInt64(other)
 	}
 
 	switch v.kind {
@@ -251,6 +282,9 @@ func (v Value) Equals(other Value) bool {
 	case KindList:
 		a := v.v.(*List)
 		b := other.v.(*List)
+		if a == b {
+			return true
+		}
 		if a.Len() != b.Len() {
 			return false
 		}
@@ -264,6 +298,9 @@ func (v Value) Equals(other Value) bool {
 	case KindDict:
 		a := v.v.(*Dict)
 		b := other.v.(*Dict)
+		if a == b {
+			return true
+		}
 		if a.Len() != b.Len() {
 			return false
 		}

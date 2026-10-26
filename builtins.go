@@ -2,9 +2,12 @@ package jinja
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,10 +84,17 @@ func builtinRange(args []Value, kwargs map[string]Value) (Value, error) {
 	if step > 0 {
 		for i := start; i < stop; i += step {
 			items = append(items, NewInt(i))
+			// A step beyond the integer limit is also beyond stop.
+			if i > math.MaxInt64-step {
+				break
+			}
 		}
 	} else {
 		for i := start; i > stop; i += step {
 			items = append(items, NewInt(i))
+			if i < math.MinInt64-step {
+				break
+			}
 		}
 	}
 
@@ -294,22 +304,26 @@ func evalTest(name string, val Value, args []Value) (bool, error) {
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) > 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order > 0, nil
 	case "ge", ">=":
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) >= 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order >= 0, nil
 	case "lt", "lessthan", "<":
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) < 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order < 0, nil
 	case "le", "<=":
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) <= 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order <= 0, nil
 	case "in":
 		if len(args) < 1 {
 			return false, nil
@@ -341,6 +355,12 @@ func evalTest(name string, val Value, args []Value) (bool, error) {
 		if len(args) < 1 {
 			return false, nil
 		}
+		if val.kind != args[0].kind {
+			return false, nil
+		}
+		if val.IsList() || val.IsDict() {
+			return val.v == args[0].v, nil
+		}
 		return val.Equals(args[0]), nil
 	}
 
@@ -354,6 +374,11 @@ func evalTest(name string, val Value, args []Value) (bool, error) {
 func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 	if len(args) == 0 {
 		return NewString(""), nil
+	}
+
+	// Check both encoding paths before recursively converting containers.
+	if containsCycle(args[0], nil) {
+		return Undefined(), fmt.Errorf("tojson: circular reference detected")
 	}
 
 	itemSeparator := ", "
@@ -393,6 +418,36 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 	return NewString(sb.String()), nil
+}
+
+// Only references to ancestors form cycles; siblings may share a container.
+func containsCycle(v Value, ancestors []any) bool {
+	switch v.kind {
+	case KindList:
+		list := v.AsList()
+		if slices.Contains(ancestors, any(list)) {
+			return true
+		}
+		ancestors = append(ancestors, list)
+		for _, item := range list.Items {
+			if containsCycle(item, ancestors) {
+				return true
+			}
+		}
+
+	case KindDict:
+		d := v.AsDict()
+		if slices.Contains(ancestors, any(d)) {
+			return true
+		}
+		ancestors = append(ancestors, d)
+		for _, key := range d.Keys {
+			if containsCycle(d.Data[key], ancestors) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // encodeValueJSON writes the JSON encoding of v directly into sb without
@@ -499,12 +554,84 @@ func filterFromjson(args []Value, kwargs map[string]Value) (Value, error) {
 		return Undefined(), nil
 	}
 
-	var result any
-	if err := json.Unmarshal([]byte(args[0].AsString()), &result); err != nil {
+	dec := json.NewDecoder(strings.NewReader(args[0].AsString()))
+	dec.UseNumber()
+	result, err := decodeJSONValue(dec)
+	if err != nil {
 		return Undefined(), fmt.Errorf("fromjson: %w", err)
 	}
+	if _, err := dec.Token(); err != io.EOF {
+		if err != nil {
+			return Undefined(), fmt.Errorf("fromjson: %w", err)
+		}
+		return Undefined(), fmt.Errorf("fromjson: trailing data")
+	}
 
-	return FromGoValue(result), nil
+	return result, nil
+}
+
+// decodeJSONValue builds ordered containers and converts numeric tokens without
+// the rounding or string fallback of decoding through plain Go values.
+func decodeJSONValue(dec *json.Decoder) (Value, error) {
+	token, err := dec.Token()
+	if err != nil {
+		return Undefined(), err
+	}
+
+	switch token := token.(type) {
+	case json.Number:
+		if !strings.ContainsAny(string(token), ".eE") {
+			n, err := token.Int64()
+			if err != nil {
+				return Undefined(), fmt.Errorf("integer %q: %w", token, err)
+			}
+			return NewInt(n), nil
+		}
+		n, err := token.Float64()
+		if err != nil {
+			return Undefined(), fmt.Errorf("float %q: %w", token, err)
+		}
+		return NewFloat(n), nil
+
+	case json.Delim:
+		switch token {
+		case '{':
+			result := NewDict()
+			for dec.More() {
+				key, err := dec.Token()
+				if err != nil {
+					return Undefined(), err
+				}
+				value, err := decodeJSONValue(dec)
+				if err != nil {
+					return Undefined(), err
+				}
+				result.AsDict().Set(key.(string), value)
+			}
+			if _, err := dec.Token(); err != nil {
+				return Undefined(), err
+			}
+			return result, nil
+
+		case '[':
+			var items []Value
+			for dec.More() {
+				value, err := decodeJSONValue(dec)
+				if err != nil {
+					return Undefined(), err
+				}
+				items = append(items, value)
+			}
+			if _, err := dec.Token(); err != nil {
+				return Undefined(), err
+			}
+			return NewList(items), nil
+		}
+		return Undefined(), fmt.Errorf("unexpected JSON delimiter %q", token)
+
+	default:
+		return FromGoValue(token), nil
+	}
 }
 
 func filterItems(args []Value, kwargs map[string]Value) (Value, error) {
@@ -520,8 +647,7 @@ func filterItems(args []Value, kwargs map[string]Value) (Value, error) {
 	// invalid prompts. The wording deliberately matches Python jinja2 so
 	// templates that surface this string get an identical message.
 	if !args[0].IsDict() {
-		//lint:ignore ST1005 message text mirrors Python jinja2 verbatim
-		return Undefined(), fmt.Errorf("Can only get item pairs from a mapping.")
+		return Undefined(), fmt.Errorf("can only get item pairs from a mapping")
 	}
 
 	d := args[0].AsDict()
@@ -762,11 +888,14 @@ func filterSort(args []Value, kwargs map[string]Value) (Value, error) {
 				right, _ = right.AsDict().Get(attribute)
 			}
 		}
-		cmp := compareValues(left, right)
-		if reverse {
-			return cmp > 0
+		order, ordered := compareValues(left, right)
+		if !ordered {
+			return false
 		}
-		return cmp < 0
+		if reverse {
+			return order > 0
+		}
+		return order < 0
 	})
 
 	return NewList(items), nil
@@ -955,7 +1084,10 @@ func filterSelect(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = args[1].AsString()
 	}
 
-	testArgs := args[2:]
+	var testArgs []Value
+	if len(args) > 2 {
+		testArgs = args[2:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {
@@ -988,7 +1120,10 @@ func filterReject(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = args[1].AsString()
 	}
 
-	testArgs := args[2:]
+	var testArgs []Value
+	if len(args) > 2 {
+		testArgs = args[2:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {
@@ -1022,7 +1157,10 @@ func filterSelectattr(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = printValue(args[2])
 	}
 
-	testArgs := args[3:]
+	var testArgs []Value
+	if len(args) > 3 {
+		testArgs = args[3:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {
@@ -1063,7 +1201,10 @@ func filterRejectattr(args []Value, kwargs map[string]Value) (Value, error) {
 		testName = printValue(args[2])
 	}
 
-	testArgs := args[3:]
+	var testArgs []Value
+	if len(args) > 3 {
+		testArgs = args[3:]
+	}
 
 	var items []Value
 	for _, item := range list.Items {
@@ -1190,7 +1331,7 @@ func filterMax(args []Value, kwargs map[string]Value) (Value, error) {
 
 	maxVal := list.Items[0]
 	for _, item := range list.Items[1:] {
-		if compareValues(item, maxVal) > 0 {
+		if order, ordered := compareValues(item, maxVal); ordered && order > 0 {
 			maxVal = item
 		}
 	}
@@ -1210,7 +1351,7 @@ func filterMin(args []Value, kwargs map[string]Value) (Value, error) {
 
 	minVal := list.Items[0]
 	for _, item := range list.Items[1:] {
-		if compareValues(item, minVal) < 0 {
+		if order, ordered := compareValues(item, minVal); ordered && order < 0 {
 			minVal = item
 		}
 	}
@@ -1223,23 +1364,13 @@ func filterSum(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewInt(0), nil
 	}
 
-	list := args[0].AsList()
-	var sumF float64
-	isFloat := false
-
-	for _, item := range list.Items {
-		if item.IsFloat() {
-			isFloat = true
-			sumF += item.AsFloat()
-		} else if item.IsInt() {
-			sumF += float64(item.AsInt())
+	sum := NewInt(0)
+	for _, item := range args[0].AsList().Items {
+		if item.IsInt() || item.IsFloat() {
+			sum = addValues(sum, item)
 		}
 	}
-
-	if isFloat {
-		return NewFloat(sumF), nil
-	}
-	return NewInt(int64(sumF)), nil
+	return sum, nil
 }
 
 func filterBatch(args []Value, kwargs map[string]Value) (Value, error) {
@@ -1308,19 +1439,51 @@ func toFloat64(v Value) float64 {
 	return 0
 }
 
-func compareValues(a, b Value) int {
+// compareValues returns the ordering and whether the values are ordered.
+// A comparison involving a floating-point NaN is unordered.
+func compareValues(a, b Value) (int, bool) {
+	if (a.IsFloat() && math.IsNaN(a.AsFloat())) || (b.IsFloat() && math.IsNaN(b.AsFloat())) {
+		return 0, false
+	}
+
+	aIntegral := a.IsInt() || a.IsBool()
+	bIntegral := b.IsInt() || b.IsBool()
+	switch {
+	case aIntegral && bIntegral:
+		return cmp.Compare(toInt64(a), toInt64(b)), true
+	case aIntegral && b.IsFloat():
+		return compareIntFloat(toInt64(a), b.AsFloat()), true
+	case a.IsFloat() && bIntegral:
+		return -compareIntFloat(toInt64(b), a.AsFloat()), true
+	}
+
 	af := toFloat64(a)
 	bf := toFloat64(b)
 	if af < bf {
-		return -1
+		return -1, true
 	}
 	if af > bf {
-		return 1
+		return 1, true
 	}
 	if a.IsString() && b.IsString() {
-		return strings.Compare(a.AsString(), b.AsString())
+		return strings.Compare(a.AsString(), b.AsString()), true
 	}
-	return 0
+	return 0, true
+}
+
+// compareIntFloat compares without rounding i to a float. f must not be NaN.
+func compareIntFloat(i int64, f float64) int {
+	if f >= 0x1p63 {
+		return -1
+	}
+	if f < -0x1p63 {
+		return 1
+	}
+	if order := cmp.Compare(i, int64(f)); order != 0 {
+		return order
+	}
+	// The integer parts match; only a fractional component can differ.
+	return cmp.Compare(float64(i), f)
 }
 
 func containsValue(container, item Value) bool {

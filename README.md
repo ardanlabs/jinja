@@ -100,6 +100,11 @@ See the [examples](examples/) directory for more, including tool calling.
 - Inline if expressions: `{{ x if condition else y }}`
 - Slice notation: `{{ items[::-1] }}`
 
+String and list repetition with `*` supports either operand order. Negative
+counts produce empty sequences. Each repetition is limited to 64 MiB of string
+bytes or list backing storage; larger results return a rendering error. This
+limit does not include nested values or the final rendered output.
+
 ### Filters
 
 `abs` · `batch` · `capitalize` · `count` · `default` / `d` · `dictsort` · `escape` / `e` · `first` · `float` · `fromjson` · `indent` · `int` · `items` · `join` · `last` · `length` · `list` · `lower` · `map` · `max` · `min` · `reject` · `rejectattr` · `replace` · `reverse` · `round` · `safe` · `select` · `selectattr` · `sort` · `string` · `sum` · `title` · `tojson` · `trim` · `unique` · `upper` · `wordcount`

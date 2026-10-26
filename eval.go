@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -823,7 +824,7 @@ func (e *evaluator) evalBinary(n *binExpr) (Value, error) {
 	case "-":
 		return subValues(left, right), nil
 	case "*":
-		return mulValues(left, right), nil
+		return mulValues(left, right)
 	case "/":
 		return divValues(left, right), nil
 	case "//":
@@ -835,17 +836,21 @@ func (e *evaluator) evalBinary(n *binExpr) (Value, error) {
 	case "~":
 		return NewString(printValue(left) + printValue(right)), nil
 	case "==":
-		return NewBool(valuesEqual(left, right)), nil
+		return NewBool(left.Equals(right)), nil
 	case "!=":
-		return NewBool(!valuesEqual(left, right)), nil
+		return NewBool(!left.Equals(right)), nil
 	case "<":
-		return NewBool(compareValues(left, right) < 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order < 0), nil
 	case ">":
-		return NewBool(compareValues(left, right) > 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order > 0), nil
 	case "<=":
-		return NewBool(compareValues(left, right) <= 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order <= 0), nil
 	case ">=":
-		return NewBool(compareValues(left, right) >= 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order >= 0), nil
 	case "in":
 		return NewBool(containsValue(right, left)), nil
 	case "not in":
@@ -1336,14 +1341,46 @@ func subValues(a, b Value) Value {
 	return NewInt(toInt64(a) - toInt64(b))
 }
 
-func mulValues(a, b Value) Value {
-	if a.IsString() && b.IsInt() {
-		return NewString(strings.Repeat(a.AsString(), int(b.AsInt())))
+// maxRepeatBytes limits the string bytes or list backing array allocated by a
+// single repetition. It does not bound nested values or rendered output.
+const maxRepeatBytes = 64 << 20
+
+func mulValues(a, b Value) (Value, error) {
+	// Normalize repetition to sequence * count.
+	if (a.IsInt() || a.IsBool()) && (b.IsString() || b.IsList()) {
+		a, b = b, a
+	}
+	if (a.IsString() || a.IsList()) && (b.IsInt() || b.IsBool()) {
+		count := max(toInt64(b), 0)
+		if a.IsString() {
+			s := a.AsString()
+			if count == 0 || len(s) == 0 {
+				return NewString(""), nil
+			}
+			if count > maxRepeatBytes/int64(len(s)) {
+				return Undefined(), fmt.Errorf("repeated string exceeds %d-byte allocation limit", maxRepeatBytes)
+			}
+			return NewString(strings.Repeat(s, int(count))), nil
+		}
+
+		src := a.AsList().Items
+		if count == 0 || len(src) == 0 {
+			return NewList(nil), nil
+		}
+		const maxItems = maxRepeatBytes / int(unsafe.Sizeof(Value{}))
+		if count > int64(maxItems)/int64(len(src)) {
+			return Undefined(), fmt.Errorf("repeated list exceeds %d-byte allocation limit", maxRepeatBytes)
+		}
+		items := make([]Value, len(src)*int(count))
+		for i := range int(count) {
+			copy(items[i*len(src):], src)
+		}
+		return NewList(items), nil
 	}
 	if a.IsFloat() || b.IsFloat() {
-		return NewFloat(toFloat64(a) * toFloat64(b))
+		return NewFloat(toFloat64(a) * toFloat64(b)), nil
 	}
-	return NewInt(toInt64(a) * toInt64(b))
+	return NewInt(toInt64(a) * toInt64(b)), nil
 }
 
 func divValues(a, b Value) Value {
@@ -1372,16 +1409,4 @@ func modValues(a, b Value) Value {
 
 func powValues(a, b Value) Value {
 	return NewFloat(math.Pow(toFloat64(a), toFloat64(b)))
-}
-
-func valuesEqual(a, b Value) bool {
-	// Cross-type numeric comparison.
-	if a.IsNumber() && b.IsNumber() {
-		return toFloat64(a) == toFloat64(b)
-	}
-	// None == None.
-	if a.IsNone() && b.IsNone() {
-		return true
-	}
-	return a.Equals(b)
 }
