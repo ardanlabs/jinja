@@ -83,10 +83,17 @@ func builtinRange(args []Value, kwargs map[string]Value) (Value, error) {
 	if step > 0 {
 		for i := start; i < stop; i += step {
 			items = append(items, NewInt(i))
+			// A step beyond the integer limit is also beyond stop.
+			if i > math.MaxInt64-step {
+				break
+			}
 		}
 	} else {
 		for i := start; i > stop; i += step {
 			items = append(items, NewInt(i))
+			if i < math.MinInt64-step {
+				break
+			}
 		}
 	}
 

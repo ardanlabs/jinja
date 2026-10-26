@@ -1,13 +1,16 @@
 package jinja_test
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/ardanlabs/jinja"
@@ -226,6 +229,62 @@ func TestSequenceRepetition(t *testing.T) {
 				}
 				return
 			}
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRangeIntegerBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"positive overflow", `{{ range(9223372036854775805, 9223372036854775807, 3) | list }}`, "[9223372036854775805]"},
+		{"negative overflow", `{{ range(-9223372036854775806, -9223372036854775808, -3) | list }}`, "[-9223372036854775806]"},
+		{"maximum positive step", `{{ range(1, 2, 9223372036854775807) | list }}`, "[1]"},
+		{"large negative step", `{{ range(-2, -3, -9223372036854775807) | list }}`, "[-2]"},
+		{"minimum negative step", `{{ range(9223372036854775807, -9223372036854775808, -9223372036854775808) | list }}`, "[9223372036854775807, -1]"},
+		{"positive exact stop", `{{ range(9223372036854775803, 9223372036854775807, 2) | list }}`, "[9223372036854775803, 9223372036854775805]"},
+		{"negative exact stop", `{{ range(-9223372036854775804, -9223372036854775808, -2) | list }}`, "[-9223372036854775804, -9223372036854775806]"},
+		{"positive empty range", `{{ range(9223372036854775807, 9223372036854775805, 3) | list }}`, "[]"},
+		{"negative empty range", `{{ range(-9223372036854775808, -9223372036854775806, -3) | list }}`, "[]"},
+		{"ordinary range", `{{ range(2, 9, 3) | list }}`, "[2, 5, 8]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Isolate runaway allocation from a wrapped counter. A goroutine
+			// timeout would leave the broken render running in this process.
+			if os.Getenv("JINJA_RANGE_WORKER") != "1" {
+				executable, err := os.Executable()
+				if err != nil {
+					t.Fatalf("test executable: %v", err)
+				}
+				t.Setenv("JINJA_RANGE_WORKER", "1")
+				t.Setenv("GOMEMLIMIT", "16MiB")
+				ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+				defer cancel()
+				pattern := "^TestRangeIntegerBoundaries$/^" + strings.ReplaceAll(tc.name, " ", "_") + "$"
+				cmd := exec.CommandContext(ctx, executable, "-test.run="+pattern)
+				output, err := cmd.CombinedOutput()
+				if ctx.Err() != nil {
+					t.Fatalf("render did not finish within 2 seconds; want %q", tc.want)
+				}
+				if err != nil {
+					t.Fatalf("render subprocess: %v\n%s", err, output)
+				}
+				return
+			}
+
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
 			if err != nil {
 				t.Fatalf("render: %v", err)
 			}
