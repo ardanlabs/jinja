@@ -806,7 +806,15 @@ func (p *exprParser) parseCallArgs() ([]expr, []kwarg, error) {
 
 	for p.peek().kind != tokRParen && p.peek().kind != tokEOF {
 		// Check for kwarg: name=value
-		if p.peek().kind == tokName && p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].kind == tokOp && p.tokens[p.pos+1].val == "=" {
+		if p.peek().kind == tokPower {
+			p.advance()
+			val, err := p.parseExpression()
+			if err != nil {
+				return nil, nil, err
+			}
+			// An empty name denotes a mapping expanded into keyword arguments.
+			kwargs = append(kwargs, kwarg{value: val})
+		} else if p.peek().kind == tokName && p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].kind == tokOp && p.tokens[p.pos+1].val == "=" {
 			name := p.advance().val
 			p.advance() // skip =
 			val, err := p.parseExpression()
@@ -866,7 +874,7 @@ func parseTemplate(segs []segment) ([]node, error) {
 //     present on that side:
 //
 //     - lstrip_blocks: strip spaces and tabs (not newlines) from the start of
-//       the line up to the tag.
+//     the line up to the tag.
 //     - trim_blocks: strip a single newline immediately after the tag.
 //
 // Without these defaults, every block tag in a real chat template would

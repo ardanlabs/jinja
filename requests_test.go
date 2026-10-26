@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,6 +54,12 @@ func TestRequestsAgainstTemplates(t *testing.T) {
 				req := requests[reqName]
 				t.Run(reqName, func(t *testing.T) {
 					data := buildRenderData(req)
+					// Model-specific fixture controls must not affect unrelated templates.
+					if byTemplate, ok := req["chat_template_kwargs"].(map[string]any); ok {
+						if kwargs, ok := byTemplate[templateName].(map[string]any); ok {
+							maps.Copy(data, kwargs)
+						}
+					}
 
 					var got string
 					result, err := tmpl.Render(data)
@@ -60,6 +67,51 @@ func TestRequestsAgainstTemplates(t *testing.T) {
 						got = "RENDER ERROR: " + err.Error() + "\n"
 					} else {
 						got = result
+					}
+
+					if templateName == "DeepSeek-V4.1-Flash" && strings.HasPrefix(reqName, "deepseek-v4.1-") {
+						if err != nil {
+							t.Fatalf("render valid V4.1 request: %v", err)
+						}
+						if reqName == "deepseek-v4.1-tools" {
+							for _, fragment := range []string{
+								"Reasoning Effort: 75 (range 1-100, the higher the value, the more thorough the reasoning)",
+								"<think>I should use the tools.</think>",
+								"\n\n<｜DSML｜ calls>\n<｜DSML｜ invoke name=\"analyze\">\n",
+								`<｜DSML｜ parameter name="city" string="true">Paris</｜DSML｜ parameter>`,
+								`<｜DSML｜ parameter name="count" string="false">2</｜DSML｜ parameter>`,
+								`<｜DSML｜ parameter name="options" string="false">{"enabled": true, "tags": ["a", "b"]}</｜DSML｜ parameter>`,
+								"<tool_result>first result</tool_result>\n\n<tool_result>second result</tool_result>",
+							} {
+								if !strings.Contains(got, fragment) {
+									t.Errorf("rendered V4.1 output missing %q", fragment)
+								}
+							}
+						}
+						thinking := reqName != "deepseek-v4.1-chat"
+						budgets := map[string]int{
+							"deepseek-v4.1-low":        50,
+							"deepseek-v4.1-medium":     62,
+							"deepseek-v4.1-tools":      75,
+							"deepseek-v4.1-max":        100,
+							"deepseek-v4.1-effort-1":   1,
+							"deepseek-v4.1-effort-100": 100,
+						}
+						if thinking {
+							prefix := fmt.Sprintf("<｜begin▁of▁sentence｜><｜System｜>Reasoning Effort: %d (range 1-100, the higher the value, the more thorough the reasoning)\n\n", budgets[reqName])
+							if !strings.HasPrefix(got, prefix) {
+								t.Errorf("reasoning effort: got %q, want prefix %q", got, prefix)
+							}
+						} else if strings.Contains(got, "Reasoning Effort:") {
+							t.Error("chat mode unexpectedly includes a reasoning budget")
+						}
+						ending := "<｜Assistant｜></think>"
+						if thinking {
+							ending = "<｜Assistant｜><think>"
+						}
+						if !strings.HasSuffix(got, ending) {
+							t.Errorf("generation prefix: got %q, want suffix %q", got, ending)
+						}
 					}
 
 					if templateName == "DeepSeek-V4-Flash" && reqName == "kronk-req-deepseek" {

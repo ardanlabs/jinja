@@ -1236,6 +1236,43 @@ func TestRender_Beam_BuiltinBash(t *testing.T) {
 	}
 }
 
+// TestDeepSeekV41Primitives covers the Jinja operations used by the upstream
+// template without coupling their regression coverage to its full prompt.
+func TestDeepSeekV41Primitives(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"copy mapping", `{% set a = {'x': 1} %}{% set b = dict(a, x=2) %}{{ a.x }} {{ b.x }}`, "1 2", false},
+		{"dynamic keyword", `{% set key = 'x' %}{{ dict({'a': 1}, **{key: 2}).x }}`, "2", false},
+		{"macro keyword", `{% macro show(x) %}{{ x }}{% endmacro %}{{ show(**{'x': 3}) }}`, "3", false},
+		{"filter keyword", `{{ ['a', 'b'] | join(**{'d': '-'}) }}`, "a-b", false},
+		{"invalid expansion", `{{ dict(**[]) }}`, "", true},
+		{"duplicate expansion", `{{ dict(x=1, **{'x': 2}) }}`, "", true},
+		{"invalid copy", `{{ dict(1) }}`, "", true},
+		{"too many copies", `{{ dict({}, {}) }}`, "", true},
+		{"stable attribute sort", `{{ [{'n': 2, 's': 'a'}, {'n': 1, 's': 'b'}, {'n': 2, 's': 'c'}] | sort(attribute='n') | join(attribute='s') }}`, "bac", false},
+		{"reverse attribute sort", `{{ [{'n': 1, 's': 'a'}, {'n': 2, 's': 'b'}] | sort(attribute='n', reverse=true) | join(attribute='s') }}`, "ba", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tt.input)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("render: got error %v, want error %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRegression(t *testing.T) {
 	for name, content := range chatTemplates {
 		t.Run(name, func(t *testing.T) {

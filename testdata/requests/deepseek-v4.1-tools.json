@@ -1,0 +1,21 @@
+{
+  "chat_template_kwargs": {"DeepSeek-V4.1-Flash": {"thinking_mode": "thinking", "reasoning_effort": "high"}},
+  "messages": [
+    {"role": "system", "content": "Use tools when needed."},
+    {"role": "user", "content": "Analyze these inputs."},
+    {
+      "role": "assistant",
+      "content": "",
+      "reasoning_content": "I should use the tools.",
+      "tool_calls": [
+        {"id": "first", "type": "function", "function": {"name": "analyze", "arguments": "{\"city\":\"Paris\"}"}},
+        {"id": "second", "type": "function", "function": {"name": "analyze", "arguments": {"count": 2, "options": {"enabled": true, "tags": ["a", "b"]}}}}
+      ]
+    },
+    {"role": "tool", "tool_call_id": "second", "content": "second result"},
+    {"role": "tool", "tool_call_id": "first", "content": "first result"}
+  ],
+  "tools": [
+    {"function": {"description": "Analyze an input.", "name": "analyze", "parameters": {"properties": {"city": {"type": "string"}, "count": {"type": "integer"}, "options": {"type": "object"}}, "type": "object"}}, "type": "function"}
+  ]
+}

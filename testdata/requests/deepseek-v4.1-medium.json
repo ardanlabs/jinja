@@ -1,0 +1,4 @@
+{
+  "chat_template_kwargs": {"DeepSeek-V4.1-Flash": {"thinking_mode": "thinking", "reasoning_effort": "medium"}},
+  "messages": [{"role": "user", "content": "Hello."}]
+}
