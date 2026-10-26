@@ -215,6 +215,55 @@ func TestSumFilter(t *testing.T) {
 	}
 }
 
+func TestSelectionFilters(t *testing.T) {
+	rows := []map[string]any{
+		{"id": 1, "enabled": true},
+		{"id": 2, "enabled": false},
+		{"id": 3},
+	}
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"select default", `{{ [0, 1, 2] | select | list }}`, "[1, 2]"},
+		{"reject default", `{{ [0, 1, 2] | reject | list }}`, "[0]"},
+		{"selectattr default", `{{ rows | selectattr('enabled') | map(attribute='id') | list }}`, "[1]"},
+		{"rejectattr default", `{{ rows | rejectattr('enabled') | map(attribute='id') | list }}`, "[2, 3]"},
+		{"select empty", `{{ [] | select | list }}`, "[]"},
+		{"reject empty", `{{ [] | reject | list }}`, "[]"},
+		{"selectattr empty", `{{ [] | selectattr('enabled') | list }}`, "[]"},
+		{"rejectattr empty", `{{ [] | rejectattr('enabled') | list }}`, "[]"},
+		{"select explicit test", `{{ [0, 1, 2] | select('odd') | list }}`, "[1]"},
+		{"reject explicit test", `{{ [0, 1, 2] | reject('odd') | list }}`, "[0, 2]"},
+		{"selectattr explicit test", `{{ rows | selectattr('enabled', 'defined') | map(attribute='id') | list }}`, "[1, 2]"},
+		{"rejectattr explicit test", `{{ rows | rejectattr('enabled', 'defined') | map(attribute='id') | list }}`, "[3]"},
+		{"select test argument", `{{ [0, 1, 2] | select('equalto', 2) | list }}`, "[2]"},
+		{"reject test argument", `{{ [0, 1, 2] | reject('equalto', 2) | list }}`, "[0, 1]"},
+		{"selectattr test argument", `{{ rows | selectattr('enabled', 'equalto', false) | map(attribute='id') | list }}`, "[2]"},
+		{"rejectattr test argument", `{{ rows | rejectattr('enabled', 'equalto', false) | map(attribute='id') | list }}`, "[1, 3]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			defer func() {
+				if p := recover(); p != nil {
+					t.Fatalf("render: unexpected panic: %v", p)
+				}
+			}()
+			got, err := tmpl.Render(map[string]any{"rows": rows})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSequenceRepetition(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
