@@ -181,6 +181,39 @@ func TestNumericLiterals(t *testing.T) {
 	}
 }
 
+func TestSumFilter(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"large positive integers", `{{ [9007199254740993, 2] | sum }}`, "9007199254740995"},
+		{"large negative integers", `{{ [-9007199254740993, -2] | sum }}`, "-9007199254740995"},
+		{"integer cancellation", `{{ [9007199254740993, -9007199254740992] | sum }}`, "1"},
+		{"maximum integer", `{{ [9223372036854775807] | sum }}`, "9223372036854775807"},
+		{"minimum integer", `{{ [-9223372036854775808] | sum }}`, "-9223372036854775808"},
+		{"ordinary integers", `{{ [2, -3, 8] | sum }}`, "7"},
+		{"empty list", `{{ [] | sum }}`, "0"},
+		{"floats", `{{ [1.25, 2.5] | sum }}`, "3.75"},
+		{"mixed numeric types", `{{ [2, 0.5, 3] | sum }}`, "5.5"},
+		{"integer cancellation before float", `{{ [9007199254740993, -9007199254740992, 0.5] | sum }}`, "1.5"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSequenceRepetition(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
