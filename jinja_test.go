@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/ardanlabs/jinja"
 )
@@ -167,6 +168,64 @@ func TestNumericLiterals(t *testing.T) {
 				t.Fatalf("compile: %v", err)
 			}
 			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSequenceRepetition(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		source  string
+		want    string
+		wantErr bool
+	}{
+		{"string repetition", `{{ 'ab' * 3 }}`, "ababab", false},
+		{"reversed string operands", `{{ 3 * '-' }}`, "---", false},
+		{"negative string count", `{{ 'x' * -1 }}`, "", false},
+		{"list repetition", `{{ [1, 0] * 2 }}`, "[1, 0, 1, 0]", false},
+		{"reversed list operands", `{{ 2 * [1, 0] }}`, "[1, 0, 1, 0]", false},
+		{"negative list count", `{{ [1] * -2 }}`, "[]", false},
+		{"zero counts", `{{ 'x' * 0 }}|{{ [1] * 0 }}`, "|[]", false},
+		{"boolean counts", `{{ 'x' * true }}|{{ false * [1] }}`, "x|[]", false},
+		{"unicode repetition", `{{ 3 * 'é' }}`, "ééé", false},
+		{"empty list copy independence", `{% set a = [] %}{% set b = a * 3 %}{% set ignored = b.append(1) %}{{ a }}|{{ b }}`, "[]|[1]", false},
+		{"nonempty list copy independence", `{% set a = [2] %}{% set b = a * 2 %}{% set ignored = b.append(1) %}{{ a }}|{{ b }}`, "[2]|[2, 2, 1]", false},
+		{"zero count copy independence", `{% set a = [2] %}{% set b = a * 0 %}{% set ignored = b.append(1) %}{{ a }}|{{ b }}`, "[2]|[1]", false},
+		{"nested elements remain shared", `{% set a = [[]] %}{% set b = a * 2 %}{% set ignored = b[0].append(7) %}{{ a }}|{{ b }}`, "[[7]]|[[7], [7]]", false},
+		{"empty string huge count", `{{ '' * 9223372036854775807 }}`, "", false},
+		{"empty list huge count", `{{ [] * 9223372036854775807 }}`, "[]", false},
+		{"string size overflow", `{{ 'NR' * 9223372036854775807 }}`, "", true},
+		{"list size overflow", `{{ 9223372036854775807 * [1, 2] }}`, "", true},
+		{"string allocation budget", `{{ 'x' * 67108865 }}`, "", true},
+		{"list allocation budget", `{{ [1] * oversized_list_count }}`, "", true},
+		{"numeric multiplication unchanged", `{{ 3 * 4 }}|{{ 2.5 * 4 == 10.0 }}`, "12|True", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			// Report a rendering panic as a failure without aborting other cases.
+			defer func() {
+				if p := recover(); p != nil {
+					t.Fatalf("render: unexpected panic: %v", p)
+				}
+			}()
+			got, err := tmpl.Render(map[string]any{
+				"oversized_list_count": int64((64<<20)/unsafe.Sizeof(jinja.Value{})) + 1,
+			})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("render: got no error, want error")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("render: %v", err)
 			}
