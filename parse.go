@@ -2,6 +2,7 @@ package jinja
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -514,6 +515,12 @@ func (p *exprParser) parsePower() (expr, error) {
 func (p *exprParser) parseUnary() (expr, error) {
 	if p.peek().kind == tokOp && (p.peek().val == "-" || p.peek().val == "+") {
 		op := p.advance().val
+		// MinInt64 is valid, but its positive magnitude exceeds int64.
+		// Continue through postfix parsing so filters are not skipped.
+		if t := p.peek(); op == "-" && t.kind == tokInt && t.val == "9223372036854775808" {
+			p.advance()
+			return p.parsePostfix(&litExpr{val: NewInt(math.MinInt64)})
+		}
 		operand, err := p.parseUnary()
 		if err != nil {
 			return nil, err
@@ -521,15 +528,15 @@ func (p *exprParser) parseUnary() (expr, error) {
 		return &unaryExpr{op: op, operand: operand}, nil
 	}
 
-	return p.parsePostfix()
-}
-
-func (p *exprParser) parsePostfix() (expr, error) {
 	e, err := p.parseAtom()
 	if err != nil {
 		return nil, err
 	}
+	return p.parsePostfix(e)
+}
 
+func (p *exprParser) parsePostfix(e expr) (expr, error) {
+	var err error
 	for {
 		t := p.peek()
 
@@ -679,14 +686,20 @@ func (p *exprParser) parseAtom() (expr, error) {
 	// Integer literal.
 	if t.kind == tokInt {
 		p.advance()
-		n, _ := strconv.ParseInt(t.val, 10, 64)
+		n, err := strconv.ParseInt(t.val, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer %q: %w", t.val, err)
+		}
 		return &litExpr{val: NewInt(n)}, nil
 	}
 
 	// Float literal.
 	if t.kind == tokFloat {
 		p.advance()
-		f, _ := strconv.ParseFloat(t.val, 64)
+		f, err := strconv.ParseFloat(t.val, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid float %q: %w", t.val, err)
+		}
 		return &litExpr{val: NewFloat(f)}, nil
 	}
 

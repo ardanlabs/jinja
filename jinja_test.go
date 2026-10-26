@@ -135,6 +135,48 @@ func TestNumericOrdering(t *testing.T) {
 	}
 }
 
+func TestNumericLiterals(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		source         string
+		want           string
+		wantCompileErr bool
+	}{
+		{"malformed exponent", `{{ 1.2e+ }}`, "", true},
+		{"oversized integer", `{{ 999999999999999999999999 }}`, "", true},
+		{"integer above supported range", `{{ 9223372036854775808 }}`, "", true},
+		{"integer below supported range", `{{ -9223372036854775809 }}`, "", true},
+		{"float overflow", `{{ 1.0e400 }}`, "", true},
+		{"minimum integer", `{{ -9223372036854775808 }}`, "-9223372036854775808", false},
+		{"minimum integer with filter", `{{ -9223372036854775808 | int }}`, "-9223372036854775808", false},
+		{"parenthesized minimum integer with filter", `{{ (-9223372036854775808) | int }}`, "-9223372036854775808", false},
+		{"minimum integer with chained filters", `{{ -9223372036854775808 | string | length }}`, "20", false},
+		{"maximum integer", `{{ 9223372036854775807 }}`, "9223372036854775807", false},
+		{"valid exponent", `{{ 1.25e+2 == 125.0 }}`, "True", false},
+		{"small negative integer with filter", `{{ -42 | int }}`, "-42", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if tc.wantCompileErr {
+				if err == nil {
+					t.Fatal("compile: got no error, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(nil)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestForLoop(t *testing.T) {
 	source := `{% for item in items %}{{ item }}{% if not loop.last %}, {% endif %}{% endfor %}`
 	tmpl, err := jinja.Compile(source)
