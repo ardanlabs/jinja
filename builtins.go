@@ -2,6 +2,7 @@ package jinja
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -295,22 +296,26 @@ func evalTest(name string, val Value, args []Value) (bool, error) {
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) > 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order > 0, nil
 	case "ge", ">=":
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) >= 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order >= 0, nil
 	case "lt", "lessthan", "<":
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) < 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order < 0, nil
 	case "le", "<=":
 		if len(args) < 1 {
 			return false, nil
 		}
-		return compareValues(val, args[0]) <= 0, nil
+		order, ordered := compareValues(val, args[0])
+		return ordered && order <= 0, nil
 	case "in":
 		if len(args) < 1 {
 			return false, nil
@@ -840,11 +845,14 @@ func filterSort(args []Value, kwargs map[string]Value) (Value, error) {
 				right, _ = right.AsDict().Get(attribute)
 			}
 		}
-		cmp := compareValues(left, right)
-		if reverse {
-			return cmp > 0
+		order, ordered := compareValues(left, right)
+		if !ordered {
+			return false
 		}
-		return cmp < 0
+		if reverse {
+			return order > 0
+		}
+		return order < 0
 	})
 
 	return NewList(items), nil
@@ -1268,7 +1276,7 @@ func filterMax(args []Value, kwargs map[string]Value) (Value, error) {
 
 	maxVal := list.Items[0]
 	for _, item := range list.Items[1:] {
-		if compareValues(item, maxVal) > 0 {
+		if order, ordered := compareValues(item, maxVal); ordered && order > 0 {
 			maxVal = item
 		}
 	}
@@ -1288,7 +1296,7 @@ func filterMin(args []Value, kwargs map[string]Value) (Value, error) {
 
 	minVal := list.Items[0]
 	for _, item := range list.Items[1:] {
-		if compareValues(item, minVal) < 0 {
+		if order, ordered := compareValues(item, minVal); ordered && order < 0 {
 			minVal = item
 		}
 	}
@@ -1386,19 +1394,51 @@ func toFloat64(v Value) float64 {
 	return 0
 }
 
-func compareValues(a, b Value) int {
+// compareValues returns the ordering and whether the values are ordered.
+// A comparison involving a floating-point NaN is unordered.
+func compareValues(a, b Value) (int, bool) {
+	if (a.IsFloat() && math.IsNaN(a.AsFloat())) || (b.IsFloat() && math.IsNaN(b.AsFloat())) {
+		return 0, false
+	}
+
+	aIntegral := a.IsInt() || a.IsBool()
+	bIntegral := b.IsInt() || b.IsBool()
+	switch {
+	case aIntegral && bIntegral:
+		return cmp.Compare(toInt64(a), toInt64(b)), true
+	case aIntegral && b.IsFloat():
+		return compareIntFloat(toInt64(a), b.AsFloat()), true
+	case a.IsFloat() && bIntegral:
+		return -compareIntFloat(toInt64(b), a.AsFloat()), true
+	}
+
 	af := toFloat64(a)
 	bf := toFloat64(b)
 	if af < bf {
-		return -1
+		return -1, true
 	}
 	if af > bf {
-		return 1
+		return 1, true
 	}
 	if a.IsString() && b.IsString() {
-		return strings.Compare(a.AsString(), b.AsString())
+		return strings.Compare(a.AsString(), b.AsString()), true
 	}
-	return 0
+	return 0, true
+}
+
+// compareIntFloat compares without rounding i to a float. f must not be NaN.
+func compareIntFloat(i int64, f float64) int {
+	if f >= 0x1p63 {
+		return -1
+	}
+	if f < -0x1p63 {
+		return 1
+	}
+	if order := cmp.Compare(i, int64(f)); order != 0 {
+		return order
+	}
+	// The integer parts match; only a fractional component can differ.
+	return cmp.Compare(float64(i), f)
 }
 
 func containsValue(container, item Value) bool {

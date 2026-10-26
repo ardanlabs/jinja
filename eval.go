@@ -839,13 +839,17 @@ func (e *evaluator) evalBinary(n *binExpr) (Value, error) {
 	case "!=":
 		return NewBool(!left.Equals(right)), nil
 	case "<":
-		return NewBool(compareValues(left, right) < 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order < 0), nil
 	case ">":
-		return NewBool(compareValues(left, right) > 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order > 0), nil
 	case "<=":
-		return NewBool(compareValues(left, right) <= 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order <= 0), nil
 	case ">=":
-		return NewBool(compareValues(left, right) >= 0), nil
+		order, ordered := compareValues(left, right)
+		return NewBool(ordered && order >= 0), nil
 	case "in":
 		return NewBool(containsValue(right, left)), nil
 	case "not in":

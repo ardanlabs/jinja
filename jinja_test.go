@@ -87,6 +87,54 @@ func TestNumericEquality(t *testing.T) {
 	}
 }
 
+func TestNumericOrdering(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"distinct large integers", `{{ 9007199254740992 < 9007199254740993 }}`, "True"},
+		{"large integer and rounded float", `{{ 9007199254740993 > 9007199254740992.0 }}`, "True"},
+		{"float before large integer", `{{ 9007199254740992.0 < 9007199254740993 }}`, "True"},
+		{"negative large integer", `{{ -9007199254740993 < -9007199254740992.0 }}`, "True"},
+		{"non-strict large integer comparisons", `{{ 9007199254740993 <= 9007199254740992 }}|{{ 9007199254740992 >= 9007199254740993 }}`, "False|False"},
+		{"fractional comparisons", `{{ -1 > -1.5 }}|{{ -1 < -0.5 }}|{{ 1 < 1.5 }}|{{ 1.5 > 1 }}`, "True|True|True|True"},
+		{"integer boundaries", `{{ max_int < 9223372036854775808.0 }}|{{ min_int >= -9223372036854775808.0 }}|{{ min_int > -9223372036854777856.0 }}`, "True|True|True"},
+		{"sort large integers", `{{ [9007199254740993, 9007199254740992] | sort }}`, "[9007199254740992, 9007199254740993]"},
+		{"reverse sort large integers", `{{ [9007199254740992, 9007199254740993] | sort(reverse=true) }}`, "[9007199254740993, 9007199254740992]"},
+		{"minimum large integer", `{{ [9007199254740993, 9007199254740992] | min }}`, "9007199254740992"},
+		{"maximum large integer", `{{ [9007199254740992, 9007199254740993] | max }}`, "9007199254740993"},
+		{"ordering tests", `{{ 9007199254740993 is gt(9007199254740992) }}|{{ 9007199254740992 is lt(9007199254740993) }}|{{ 9007199254740993 is le(9007199254740992) }}|{{ 9007199254740992 is ge(9007199254740993) }}`, "True|True|False|False"},
+		{"nan on right", `{{ 1 < nan }}|{{ 1 > nan }}|{{ 1 <= nan }}|{{ 1 >= nan }}`, "False|False|False|False"},
+		{"nan on left", `{{ nan < 1 }}|{{ nan > 1 }}|{{ nan <= 1 }}|{{ nan >= 1 }}`, "False|False|False|False"},
+		{"float nan comparisons", `{{ 1.5 < nan }}|{{ nan > 1.5 }}|{{ nan <= nan }}|{{ nan >= nan }}`, "False|False|False|False"},
+		{"nan ordering tests", `{{ 1 is gt(nan) }}|{{ nan is lt(1) }}|{{ 1 is le(nan) }}|{{ nan is ge(1) }}`, "False|False|False|False"},
+		{"equal numeric values remain ordered", `{{ 1 <= 1.0 }}|{{ 1.0 >= 1 }}|{{ 1 < 1.0 }}|{{ 1.0 > 1 }}`, "True|True|False|False"},
+		{"boolean numeric ordering", `{{ false < 0.5 }}|{{ 0.5 < true }}|{{ true >= 1 }}|{{ 0 <= false }}`, "True|True|True|True"},
+		{"infinities", `{{ max_int < inf }}|{{ min_int > -inf }}`, "True|True"},
+		{"small numeric and string controls", `{{ 2 < 3 }}|{{ 3.5 > 2.5 }}|{{ false < true }}|{{ 'apple' < 'banana' }}`, "True|True|True|True"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(map[string]any{
+				"min_int": int64(math.MinInt64),
+				"max_int": int64(math.MaxInt64),
+				"nan":     math.NaN(),
+				"inf":     math.Inf(1),
+			})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestForLoop(t *testing.T) {
 	source := `{% for item in items %}{{ item }}{% if not loop.last %}, {% endif %}{% endfor %}`
 	tmpl, err := jinja.Compile(source)
