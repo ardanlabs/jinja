@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"sort"
 	"strconv"
@@ -505,12 +506,84 @@ func filterFromjson(args []Value, kwargs map[string]Value) (Value, error) {
 		return Undefined(), nil
 	}
 
-	var result any
-	if err := json.Unmarshal([]byte(args[0].AsString()), &result); err != nil {
+	dec := json.NewDecoder(strings.NewReader(args[0].AsString()))
+	dec.UseNumber()
+	result, err := decodeJSONValue(dec)
+	if err != nil {
 		return Undefined(), fmt.Errorf("fromjson: %w", err)
 	}
+	if _, err := dec.Token(); err != io.EOF {
+		if err != nil {
+			return Undefined(), fmt.Errorf("fromjson: %w", err)
+		}
+		return Undefined(), fmt.Errorf("fromjson: trailing data")
+	}
 
-	return FromGoValue(result), nil
+	return result, nil
+}
+
+// decodeJSONValue builds ordered containers and converts numeric tokens without
+// the rounding or string fallback of decoding through plain Go values.
+func decodeJSONValue(dec *json.Decoder) (Value, error) {
+	token, err := dec.Token()
+	if err != nil {
+		return Undefined(), err
+	}
+
+	switch token := token.(type) {
+	case json.Number:
+		if !strings.ContainsAny(string(token), ".eE") {
+			n, err := token.Int64()
+			if err != nil {
+				return Undefined(), fmt.Errorf("integer %q: %w", token, err)
+			}
+			return NewInt(n), nil
+		}
+		n, err := token.Float64()
+		if err != nil {
+			return Undefined(), fmt.Errorf("float %q: %w", token, err)
+		}
+		return NewFloat(n), nil
+
+	case json.Delim:
+		switch token {
+		case '{':
+			result := NewDict()
+			for dec.More() {
+				key, err := dec.Token()
+				if err != nil {
+					return Undefined(), err
+				}
+				value, err := decodeJSONValue(dec)
+				if err != nil {
+					return Undefined(), err
+				}
+				result.AsDict().Set(key.(string), value)
+			}
+			if _, err := dec.Token(); err != nil {
+				return Undefined(), err
+			}
+			return result, nil
+
+		case '[':
+			var items []Value
+			for dec.More() {
+				value, err := decodeJSONValue(dec)
+				if err != nil {
+					return Undefined(), err
+				}
+				items = append(items, value)
+			}
+			if _, err := dec.Token(); err != nil {
+				return Undefined(), err
+			}
+			return NewList(items), nil
+		}
+		return Undefined(), fmt.Errorf("unexpected JSON delimiter %q", token)
+
+	default:
+		return FromGoValue(token), nil
+	}
 }
 
 func filterItems(args []Value, kwargs map[string]Value) (Value, error) {

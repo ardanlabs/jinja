@@ -188,21 +188,117 @@ func TestListFilter(t *testing.T) {
 }
 
 func TestFromJSONFilter(t *testing.T) {
-	source := `{%- set data = data | from_json -%}{{ data.name }}:{{ data.value }}`
-	tmpl, err := jinja.Compile(source)
-	if err != nil {
-		t.Fatalf("compile: %v", err)
-	}
-
-	result, err := tmpl.Render(map[string]any{
-		"data": `{"name":"test","value":42}`,
-	})
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
-
-	if result != "test:42" {
-		t.Errorf("got %q, want %q", result, "test:42")
+	for _, tc := range []struct {
+		name    string
+		source  string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:   "from_json alias",
+			source: `{% set config = data | from_json %}{{ config.name }}:{{ config.value }}`,
+			input:  `{"name":"test","value":42}`,
+			want:   "test:42",
+		},
+		{
+			name:   "large integer precision and type",
+			source: `{{ (data | fromjson).id }}:{{ (data | fromjson).id is integer }}`,
+			input:  `{"id":9007199254740993}`,
+			want:   "9007199254740993:True",
+		},
+		{
+			name:   "nested large integer with alias",
+			source: `{{ (data | from_json)[0].id }}`,
+			input:  `[{"id":9007199254740993}]`,
+			want:   "9007199254740993",
+		},
+		{
+			name:   "object key order",
+			source: `{% for key in data | fromjson %}{{ key }};{% endfor %}`,
+			input:  `{"upf":1,"amf":2}`,
+			want:   "upf;amf;",
+		},
+		{
+			name:   "nested object key order",
+			source: `{% for key in (data | fromjson)[0] %}{{ key }};{% endfor %}`,
+			input:  `[{"z":1,"a":2}]`,
+			want:   "z;a;",
+		},
+		{
+			name:   "float type preserved",
+			source: `{{ (data | fromjson) is float }}`,
+			input:  `1.0`,
+			want:   "True",
+		},
+		{
+			name:   "integer boundaries",
+			source: `{{ data | fromjson | tojson }}`,
+			input:  `[-9223372036854775808,9223372036854775807]`,
+			want:   "[-9223372036854775808, 9223372036854775807]",
+		},
+		{
+			name:    "integer above supported range rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `9223372036854775808`,
+			wantErr: true,
+		},
+		{
+			name:    "integer below supported range rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `-9223372036854775809`,
+			wantErr: true,
+		},
+		{
+			name:   "duplicate key keeps its first position and last value",
+			source: `{% set config = data | fromjson %}{% for key in config %}{{ key }}={{ config[key] }};{% endfor %}`,
+			input:  `{"z":1,"a":2,"z":3}`,
+			want:   "z=3;a=2;",
+		},
+		{
+			name:   "scalars and empty containers",
+			source: `{{ data | fromjson | tojson }}`,
+			input:  `[null,true,false,"text",{},[]]`,
+			want:   `[null, true, false, "text", {}, []]`,
+		},
+		{
+			name:    "numeric overflow is an error, not a string",
+			source:  `{{ data | fromjson | tojson }}`,
+			input:   `{"id":1e400}`,
+			wantErr: true,
+		},
+		{
+			name:    "trailing data rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `{} {}`,
+			wantErr: true,
+		},
+		{
+			name:    "malformed JSON rejected",
+			source:  `{{ data | fromjson }}`,
+			input:   `{"id":[1}`,
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(map[string]any{"data": tc.input})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("render: got %q without error, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
