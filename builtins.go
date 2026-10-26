@@ -341,6 +341,12 @@ func evalTest(name string, val Value, args []Value) (bool, error) {
 		if len(args) < 1 {
 			return false, nil
 		}
+		if val.kind != args[0].kind {
+			return false, nil
+		}
+		if val.IsList() || val.IsDict() {
+			return val.v == args[0].v, nil
+		}
 		return val.Equals(args[0]), nil
 	}
 
@@ -520,8 +526,7 @@ func filterItems(args []Value, kwargs map[string]Value) (Value, error) {
 	// invalid prompts. The wording deliberately matches Python jinja2 so
 	// templates that surface this string get an identical message.
 	if !args[0].IsDict() {
-		//lint:ignore ST1005 message text mirrors Python jinja2 verbatim
-		return Undefined(), fmt.Errorf("Can only get item pairs from a mapping.")
+		return Undefined(), fmt.Errorf("can only get item pairs from a mapping")
 	}
 
 	d := args[0].AsDict()

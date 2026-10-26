@@ -3,6 +3,7 @@ package jinja_test
 import (
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,59 @@ func TestBasicRender(t *testing.T) {
 
 	if result != "Hello World!" {
 		t.Errorf("expected 'Hello World!', got %q", result)
+	}
+}
+
+func TestNumericEquality(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{"distinct large integers", `{{ 9007199254740992 == 9007199254740993 }}`, "False"},
+		{"large integer and rounded float", `{{ 9007199254740993 == 9007199254740992.0 }}`, "False"},
+		{"large integer inequality", `{{ 9007199254740992 != 9007199254740993 }}`, "True"},
+		{"equal integer and float", `{{ 1 == 1.0 }}`, "True"},
+		{"nested numeric equality", `{{ [{'qfi': 1}] == [{'qfi': 1.0}] }}`, "True"},
+		{"numeric membership", `{{ 1.0 in [1] }}`, "True"},
+		{"boolean numeric equality", `{{ true == 1 }}`, "True"},
+		{"equalto numeric equality", `{{ 1 is equalto(1.0) }}`, "True"},
+		{"float before integer", `{{ 1.0 == 1 }}`, "True"},
+		{"fractional float", `{{ -1 == -1.5 }}`, "False"},
+		{"minimum integer and float", `{{ min_int == -9223372036854775808.0 }}`, "True"},
+		{"float above integer range", `{{ min_int == 9223372036854775808.0 }}`, "False"},
+		{"float below integer range", `{{ min_int == -9223372036854777856.0 }}`, "False"},
+		{"maximum integer and rounded float", `{{ 9223372036854775807 == 9223372036854775808.0 }}`, "False"},
+		{"integer and nan", `{{ min_int == nan }}`, "False"},
+		{"nan and itself", `{{ nan == nan }}`, "False"},
+		{"integer and infinity", `{{ min_int == inf }}`, "False"},
+		{"float infinity", `{{ inf == inf }}`, "True"},
+		// sameas tests identity, not numeric equality.
+		{"integer and float are not identical", `{{ 1 is sameas(1.0) }}`, "False"},
+		{"true and integer are not identical", `{{ true is sameas(1) }}`, "False"},
+		{"false and float are not identical", `{{ false is sameas(0.0) }}`, "False"},
+		{"equal lists are not identical", `{{ [1] is sameas([1.0]) }}`, "False"},
+		{"equal dictionaries are not identical", `{{ {'qfi': 1} is sameas({'qfi': 1.0}) }}`, "False"},
+		{"list identity", `{% set a = [1] %}{{ a is sameas(a) }}`, "True"},
+		{"dictionary identity", `{% set a = {'qfi': 1} %}{{ a is sameas(a) }}`, "True"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl, err := jinja.Compile(tc.source)
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			got, err := tmpl.Render(map[string]any{
+				"min_int": int64(math.MinInt64),
+				"nan":     math.NaN(),
+				"inf":     math.Inf(1),
+			})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("result: got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

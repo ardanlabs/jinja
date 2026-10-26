@@ -5,6 +5,7 @@ package jinja
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -226,10 +227,26 @@ func (v Value) String() string {
 	return "Undefined"
 }
 
-// Equals reports whether v and other hold the same value.
+// Equals reports whether v and other hold the same value. Numeric values
+// compare across integer, float, and boolean types without rounding integers.
 func (v Value) Equals(other Value) bool {
 	if v.kind != other.kind {
-		return false
+		if !(v.IsNumber() || v.IsBool()) || !(other.IsNumber() || other.IsBool()) {
+			return false
+		}
+
+		// Put a mixed comparison's float on the right.
+		if v.IsFloat() {
+			v, other = other, v
+		}
+		if other.IsFloat() {
+			f := other.AsFloat()
+			// Convert only integral floats in the int64 range. These bounds
+			// also reject infinities and NaN without converting them.
+			return f >= -0x1p63 && f < 0x1p63 && math.Trunc(f) == f && toInt64(v) == int64(f)
+		}
+
+		return toInt64(v) == toInt64(other)
 	}
 
 	switch v.kind {

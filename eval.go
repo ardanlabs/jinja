@@ -835,9 +835,9 @@ func (e *evaluator) evalBinary(n *binExpr) (Value, error) {
 	case "~":
 		return NewString(printValue(left) + printValue(right)), nil
 	case "==":
-		return NewBool(valuesEqual(left, right)), nil
+		return NewBool(left.Equals(right)), nil
 	case "!=":
-		return NewBool(!valuesEqual(left, right)), nil
+		return NewBool(!left.Equals(right)), nil
 	case "<":
 		return NewBool(compareValues(left, right) < 0), nil
 	case ">":
@@ -1372,16 +1372,4 @@ func modValues(a, b Value) Value {
 
 func powValues(a, b Value) Value {
 	return NewFloat(math.Pow(toFloat64(a), toFloat64(b)))
-}
-
-func valuesEqual(a, b Value) bool {
-	// Cross-type numeric comparison.
-	if a.IsNumber() && b.IsNumber() {
-		return toFloat64(a) == toFloat64(b)
-	}
-	// None == None.
-	if a.IsNone() && b.IsNone() {
-		return true
-	}
-	return a.Equals(b)
 }
