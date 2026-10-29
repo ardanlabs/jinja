@@ -1,7 +1,6 @@
 package jinja
 
 import (
-	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
@@ -42,12 +41,7 @@ func registerGlobals(s *scope) {
 }
 
 func builtinNamespace(args []Value, kwargs map[string]Value) (Value, error) {
-	d := NewDict()
-	dict := d.AsDict()
-	for k, v := range kwargs {
-		dict.Set(k, v)
-	}
-	return d, nil
+	return builtinDict(args, kwargs)
 }
 
 func builtinRaiseException(args []Value, kwargs map[string]Value) (Value, error) {
@@ -102,9 +96,12 @@ func builtinRange(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func builtinJoiner(args []Value, kwargs map[string]Value) (Value, error) {
-	sep := ""
+	sep := ", "
 	if len(args) > 0 {
 		sep = printValue(args[0])
+	}
+	if v, ok := kwargs["sep"]; ok {
+		sep = printValue(v)
 	}
 
 	first := true
@@ -124,11 +121,21 @@ func builtinDict(args []Value, kwargs map[string]Value) (Value, error) {
 		return Undefined(), fmt.Errorf("dict: expected at most one positional argument")
 	}
 	if len(args) == 1 {
-		if !args[0].IsDict() {
-			return Undefined(), fmt.Errorf("dict: positional argument must be a mapping")
+		if !args[0].IsDict() && !args[0].IsList() && !args[0].IsString() {
+			return Undefined(), fmt.Errorf("dict: positional argument must be iterable")
 		}
-		for _, key := range args[0].AsDict().Keys {
-			dict.Set(key, args[0].AsDict().Data[key])
+		if args[0].IsDict() {
+			for _, key := range args[0].AsDict().Keys {
+				dict.Set(key, args[0].AsDict().Data[key])
+			}
+		} else {
+			for _, pair := range iterableItems(args[0]) {
+				items := iterableItems(pair)
+				if len(items) != 2 {
+					return Undefined(), fmt.Errorf("dict: iterable elements must have length 2")
+				}
+				dict.Set(printValue(items[0]), items[1])
+			}
 		}
 	}
 	for k, v := range kwargs {
@@ -283,7 +290,7 @@ func evalTest(name string, val Value, args []Value) (bool, error) {
 	case "iterable":
 		return val.IsList() || val.IsDict() || val.IsString(), nil
 	case "sequence":
-		return val.IsList(), nil
+		return val.IsList() || val.IsString() || val.IsDict(), nil
 	case "callable":
 		return val.IsCallable(), nil
 	case "true":
@@ -339,16 +346,24 @@ func evalTest(name string, val Value, args []Value) (bool, error) {
 			return val.AsInt()%2 == 0, nil
 		}
 		return false, nil
+	case "divisibleby":
+		if len(args) == 0 || toFloat64(args[0]) == 0 {
+			return false, fmt.Errorf("divisibleby requires a nonzero divisor")
+		}
+		if val.IsInt() && args[0].IsInt() {
+			return val.AsInt()%args[0].AsInt() == 0, nil
+		}
+		return math.Mod(toFloat64(val), toFloat64(args[0])) == 0, nil
 	case "upper":
 		if val.IsString() {
 			s := val.AsString()
-			return s == strings.ToUpper(s), nil
+			return s == strings.ToUpper(s) && strings.ContainsFunc(s, unicode.IsUpper), nil
 		}
 		return false, nil
 	case "lower":
 		if val.IsString() {
 			s := val.AsString()
-			return s == strings.ToLower(s), nil
+			return s == strings.ToLower(s) && strings.ContainsFunc(s, unicode.IsLower), nil
 		}
 		return false, nil
 	case "sameas":
@@ -383,7 +398,19 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 
 	itemSeparator := ", "
 	keySeparator := ": "
-	if separators, ok := kwargs["separators"]; ok {
+	indent := builtinArgument(args, kwargs, 2, "indent", None())
+	var padding *string
+	if !indent.IsNone() && !indent.IsUndefined() {
+		pad := ""
+		if indent.IsString() {
+			pad = indent.AsString()
+		} else {
+			pad = strings.Repeat(" ", max(0, int(toInt64(indent))))
+		}
+		padding = &pad
+		itemSeparator = ","
+	}
+	if separators := builtinArgument(args, kwargs, 3, "separators", None()); !separators.IsNone() {
 		if !separators.IsList() || separators.AsList().Len() != 2 {
 			return Undefined(), fmt.Errorf("tojson: separators must contain two strings")
 		}
@@ -396,28 +423,27 @@ func filterTojson(args []Value, kwargs map[string]Value) (Value, error) {
 		keySeparator = items[1].AsString()
 	}
 
-	// The indented form is used rarely in chat templates; fall back to
-	// the reflection-based encoder for correctness instead of duplicating
-	// indent state in the direct encoder.
-	if indent, ok := kwargs["indent"]; ok && !indent.IsNone() && !indent.IsUndefined() {
-		n := int(toInt64(indent))
-		data, err := json.MarshalIndent(valueToGo(args[0]), "", strings.Repeat(" ", n))
-		if err != nil {
-			return NewString(""), nil
-		}
-		return NewString(string(data)), nil
-	}
-
-	// Direct Value-tree encoder. Bypasses valueToGo's intermediate
-	// map[string]any/[]any allocations and json.Marshal's reflection
-	// path. Per-render allocations drop from ~80 (Dict.Set + valueToGo
-	// + reflect) to a handful (one strings.Builder grow + one Marshal
-	// per leaf string for escaping).
 	var sb strings.Builder
-	if err := encodeValueJSON(&sb, args[0], itemSeparator, keySeparator); err != nil {
-		return NewString(""), nil
+	sortKeys := builtinArgument(args, kwargs, 4, "sort_keys", NewBool(false)).IsTruthy()
+	if err := encodeValueJSON(&sb, args[0], itemSeparator, keySeparator, padding, sortKeys, 0); err != nil {
+		return Undefined(), err
 	}
-	return NewString(sb.String()), nil
+	out := sb.String()
+	if builtinArgument(args, kwargs, 1, "ensure_ascii", NewBool(false)).IsTruthy() {
+		var ascii strings.Builder
+		for _, r := range out {
+			if r < 127 {
+				ascii.WriteRune(r)
+			} else if r <= 0xffff {
+				fmt.Fprintf(&ascii, "\\u%04x", r)
+			} else {
+				r -= 0x10000
+				fmt.Fprintf(&ascii, "\\u%04x\\u%04x", 0xd800+(r>>10), 0xdc00+(r&0x3ff))
+			}
+		}
+		out = ascii.String()
+	}
+	return NewString(out), nil
 }
 
 // Only references to ancestors form cycles; siblings may share a container.
@@ -464,7 +490,13 @@ func containsCycle(v Value, ancestors []any) bool {
 //
 // Both differences would otherwise change the tokenization of every tool
 // definition that ends up in a chat prompt.
-func encodeValueJSON(sb *strings.Builder, v Value, itemSeparator, keySeparator string) error {
+func encodeValueJSON(sb *strings.Builder, v Value, itemSeparator, keySeparator string, padding *string, sortKeys bool, depth int) error {
+	newline := func(level int) {
+		if padding != nil {
+			sb.WriteByte('\n')
+			sb.WriteString(strings.Repeat(*padding, level))
+		}
+	}
 	switch v.kind {
 	case KindUndefined, KindNone, KindCallable:
 		sb.WriteString("null")
@@ -485,11 +517,16 @@ func encodeValueJSON(sb *strings.Builder, v Value, itemSeparator, keySeparator s
 
 	case KindFloat:
 		f := v.AsFloat()
-		if math.IsInf(f, 0) || math.IsNaN(f) {
-			return fmt.Errorf("tojson: cannot encode %v", f)
+		switch {
+		case math.IsNaN(f):
+			sb.WriteString("NaN")
+		case math.IsInf(f, 1):
+			sb.WriteString("Infinity")
+		case math.IsInf(f, -1):
+			sb.WriteString("-Infinity")
+		default:
+			sb.WriteString(pythonFloat(f))
 		}
-		var buf [32]byte
-		sb.Write(strconv.AppendFloat(buf[:0], f, 'g', -1, 64))
 		return nil
 
 	case KindString:
@@ -501,9 +538,13 @@ func encodeValueJSON(sb *strings.Builder, v Value, itemSeparator, keySeparator s
 			if i > 0 {
 				sb.WriteString(itemSeparator)
 			}
-			if err := encodeValueJSON(sb, item, itemSeparator, keySeparator); err != nil {
+			newline(depth + 1)
+			if err := encodeValueJSON(sb, item, itemSeparator, keySeparator, padding, sortKeys, depth+1); err != nil {
 				return err
 			}
+		}
+		if v.AsList().Len() > 0 {
+			newline(depth)
 		}
 		sb.WriteByte(']')
 		return nil
@@ -511,17 +552,26 @@ func encodeValueJSON(sb *strings.Builder, v Value, itemSeparator, keySeparator s
 	case KindDict:
 		sb.WriteByte('{')
 		d := v.AsDict()
-		for i, key := range d.Keys {
+		keys := d.Keys
+		if sortKeys {
+			keys = slices.Clone(keys)
+			slices.Sort(keys)
+		}
+		for i, key := range keys {
 			if i > 0 {
 				sb.WriteString(itemSeparator)
 			}
+			newline(depth + 1)
 			if err := encodeJSONString(sb, key); err != nil {
 				return err
 			}
 			sb.WriteString(keySeparator)
-			if err := encodeValueJSON(sb, d.Data[key], itemSeparator, keySeparator); err != nil {
+			if err := encodeValueJSON(sb, d.Data[key], itemSeparator, keySeparator, padding, sortKeys, depth+1); err != nil {
 				return err
 			}
+		}
+		if len(keys) > 0 {
+			newline(depth)
 		}
 		sb.WriteByte('}')
 		return nil
@@ -534,18 +584,31 @@ func encodeValueJSON(sb *strings.Builder, v Value, itemSeparator, keySeparator s
 // encodeJSONString writes the JSON encoding of s without HTML-escaping (no
 // \u0026 / \u003c / \u003e), matching Python json.dumps's default behaviour.
 func encodeJSONString(sb *strings.Builder, s string) error {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(s); err != nil {
-		return err
+	sb.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"', '\\':
+			sb.WriteByte('\\')
+			sb.WriteRune(r)
+		case '\b':
+			sb.WriteString("\\b")
+		case '\f':
+			sb.WriteString("\\f")
+		case '\n':
+			sb.WriteString("\\n")
+		case '\r':
+			sb.WriteString("\\r")
+		case '\t':
+			sb.WriteString("\\t")
+		default:
+			if r < 0x20 {
+				fmt.Fprintf(sb, "\\u%04x", r)
+			} else {
+				sb.WriteRune(r)
+			}
+		}
 	}
-	// json.Encoder.Encode appends a trailing newline; strip it.
-	out := buf.Bytes()
-	if n := len(out); n > 0 && out[n-1] == '\n' {
-		out = out[:n-1]
-	}
-	sb.Write(out)
+	sb.WriteByte('"')
 	return nil
 }
 
@@ -665,10 +728,6 @@ func filterJoin(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewString(""), nil
 	}
 
-	if !args[0].IsList() {
-		return NewString(printValue(args[0])), nil
-	}
-
 	sep := ""
 	if len(args) > 1 {
 		sep = printValue(args[1])
@@ -678,18 +737,18 @@ func filterJoin(args []Value, kwargs map[string]Value) (Value, error) {
 	}
 
 	attr := ""
+	if len(args) > 2 && !args[2].IsNone() {
+		attr = printValue(args[2])
+	}
 	if a, ok := kwargs["attribute"]; ok {
 		attr = printValue(a)
 	}
 
-	list := args[0].AsList()
-	parts := make([]string, list.Len())
-	for i, item := range list.Items {
-		if attr != "" && item.IsDict() {
-			v, ok := item.AsDict().Get(attr)
-			if ok {
-				item = v
-			}
+	items := iterableItems(args[0])
+	parts := make([]string, len(items))
+	for i, item := range items {
+		if attr != "" {
+			item = builtinAttribute(item, attr, Undefined())
 		}
 		parts[i] = printValue(item)
 	}
@@ -706,6 +765,9 @@ func filterDefault(args []Value, kwargs map[string]Value) (Value, error) {
 	defVal := NewString("")
 	if len(args) > 1 {
 		defVal = args[1]
+	}
+	if v, ok := kwargs["default_value"]; ok {
+		defVal = v
 	}
 
 	boolean := false
@@ -794,25 +856,25 @@ func filterCapitalize(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func filterFirst(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
+	if len(args) == 0 {
 		return Undefined(), nil
 	}
-	l := args[0].AsList()
-	if l.Len() == 0 {
+	items := iterableItems(args[0])
+	if len(items) == 0 {
 		return Undefined(), nil
 	}
-	return l.Get(0), nil
+	return items[0], nil
 }
 
 func filterLast(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
+	if len(args) == 0 {
 		return Undefined(), nil
 	}
-	l := args[0].AsList()
-	if l.Len() == 0 {
+	items := iterableItems(args[0])
+	if len(items) == 0 {
 		return Undefined(), nil
 	}
-	return l.Get(l.Len() - 1), nil
+	return items[len(items)-1], nil
 }
 
 func filterLength(args []Value, kwargs map[string]Value) (Value, error) {
@@ -902,17 +964,25 @@ func filterSort(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func filterUnique(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
+	if len(args) == 0 {
 		return NewList(nil), nil
 	}
 
-	src := args[0].AsList().Items
-	seen := make(map[string]bool)
+	src := iterableItems(args[0])
+	caseSensitive := builtinArgument(args, kwargs, 1, "case_sensitive", NewBool(false)).IsTruthy()
+	attribute := builtinArgument(args, kwargs, 2, "attribute", None())
+	var seen []Value
 	var items []Value
 	for _, item := range src {
-		key := printValue(item)
-		if !seen[key] {
-			seen[key] = true
+		key := item
+		if !attribute.IsNone() {
+			key = builtinAttribute(item, printValue(attribute), Undefined())
+		}
+		if !caseSensitive && key.IsString() {
+			key = NewString(strings.ToLower(key.AsString()))
+		}
+		if !slices.ContainsFunc(seen, key.Equals) {
+			seen = append(seen, key)
 			items = append(items, item)
 		}
 	}
@@ -927,7 +997,7 @@ func filterList(args []Value, kwargs map[string]Value) (Value, error) {
 
 	v := args[0]
 	if v.IsList() {
-		return v, nil
+		return NewList(slices.Clone(v.AsList().Items)), nil
 	}
 	if v.IsDict() {
 		keys := v.AsDict().OrderedKeys()
@@ -946,21 +1016,52 @@ func filterList(args []Value, kwargs map[string]Value) (Value, error) {
 		return NewList(items), nil
 	}
 
-	return NewList([]Value{v}), nil
+	if v.IsUndefined() {
+		return NewList(nil), nil
+	}
+	return Undefined(), fmt.Errorf("list: value is not iterable")
 }
 
 func filterInt(args []Value, kwargs map[string]Value) (Value, error) {
 	if len(args) == 0 {
 		return NewInt(0), nil
 	}
-	return NewInt(toInt64(args[0])), nil
+	def := builtinArgument(args, kwargs, 1, "default", NewInt(0))
+	v := args[0]
+	if v.IsInt() || v.IsBool() {
+		return NewInt(toInt64(v)), nil
+	}
+	if v.IsString() {
+		s := strings.TrimSpace(v.AsString())
+		base := int(toInt64(builtinArgument(args, kwargs, 2, "base", NewInt(10))))
+		// Unlike Go's explicit-base parser, Python accepts matching prefixes.
+		sign, digits := "", s
+		if strings.HasPrefix(digits, "+") || strings.HasPrefix(digits, "-") {
+			sign, digits = digits[:1], digits[1:]
+		}
+		prefix := map[int]string{2: "0b", 8: "0o", 16: "0x"}[base]
+		if prefix != "" && strings.HasPrefix(strings.ToLower(digits), prefix) {
+			s = sign + digits[2:]
+		}
+		if n, err := strconv.ParseInt(s, base, 64); err == nil {
+			return NewInt(n), nil
+		}
+	}
+	f, ok := builtinFloat(v)
+	if ok && !math.IsNaN(f) && !math.IsInf(f, 0) && f >= -0x1p63 && f < 0x1p63 {
+		return NewInt(int64(f)), nil
+	}
+	return def, nil
 }
 
 func filterFloatConv(args []Value, kwargs map[string]Value) (Value, error) {
 	if len(args) == 0 {
 		return NewFloat(0), nil
 	}
-	return NewFloat(toFloat64(args[0])), nil
+	if f, ok := builtinFloat(args[0]); ok {
+		return NewFloat(f), nil
+	}
+	return builtinArgument(args, kwargs, 1, "default", NewFloat(0)), nil
 }
 
 func filterString(args []Value, kwargs map[string]Value) (Value, error) {
@@ -1011,12 +1112,34 @@ func filterRound(args []Value, kwargs map[string]Value) (Value, error) {
 
 	f := toFloat64(args[0])
 	pow := math.Pow(10, float64(precision))
-	rounded := math.Round(f*pow) / pow
-
-	if precision == 0 {
-		return NewFloat(rounded), nil
+	method := printValue(builtinArgument(args, kwargs, 2, "method", NewString("common")))
+	switch method {
+	case "ceil":
+		return NewFloat(math.Ceil(f*pow) / pow), nil
+	case "floor":
+		return NewFloat(math.Floor(f*pow) / pow), nil
+	case "common":
+		if math.IsInf(f, 0) || math.IsNaN(f) {
+			return NewFloat(f), nil
+		}
+		if precision >= 0 && precision <= 323 {
+			// Decimal formatting rounds the actual binary value, not f*10^n.
+			n, err := strconv.ParseFloat(strconv.FormatFloat(f, 'f', int(precision), 64), 64)
+			if err != nil {
+				return Undefined(), fmt.Errorf("round: %w", err)
+			}
+			return NewFloat(n), nil
+		}
+		if precision > 323 {
+			return NewFloat(f), nil
+		}
+		if precision < -308 {
+			return NewFloat(math.Copysign(0, f)), nil
+		}
+		return NewFloat(math.RoundToEven(f*pow) / pow), nil
+	default:
+		return Undefined(), fmt.Errorf("round: method must be common, ceil or floor")
 	}
-	return NewFloat(rounded), nil
 }
 
 func filterAbs(args []Value, kwargs map[string]Value) (Value, error) {
@@ -1040,11 +1163,11 @@ func filterAbs(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func filterMap(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
+	if len(args) == 0 {
 		return NewList(nil), nil
 	}
 
-	list := args[0].AsList()
+	src := iterableItems(args[0])
 
 	// map(attribute="name") form
 	if attr, ok := kwargs["attribute"]; ok {
@@ -1054,31 +1177,40 @@ func filterMap(args []Value, kwargs map[string]Value) (Value, error) {
 			defVal = d
 		}
 
-		items := make([]Value, list.Len())
-		for i, item := range list.Items {
-			if item.IsDict() {
-				v, found := item.AsDict().Get(attrName)
-				if found {
-					items[i] = v
-				} else {
-					items[i] = defVal
-				}
-			} else {
-				items[i] = defVal
-			}
+		items := make([]Value, len(src))
+		for i, item := range src {
+			items[i] = builtinAttribute(item, attrName, defVal)
 		}
 		return NewList(items), nil
 	}
 
-	return NewList(list.Items), nil
+	if len(args) < 2 {
+		return Undefined(), fmt.Errorf("map requires a filter argument")
+	}
+	s := newScope(nil)
+	registerFilters(s)
+	filter, ok := lookupFilter(s, printValue(args[1]))
+	if !ok {
+		return Undefined(), fmt.Errorf("unknown filter %q", printValue(args[1]))
+	}
+	items := make([]Value, len(src))
+	for i, item := range src {
+		callArgs := append([]Value{item}, args[2:]...)
+		v, err := filter.AsCallable().Fn(callArgs, kwargs)
+		if err != nil {
+			return Undefined(), err
+		}
+		items[i] = v
+	}
+	return NewList(items), nil
 }
 
 func filterSelect(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
+	if len(args) == 0 {
 		return NewList(nil), nil
 	}
 
-	list := args[0].AsList()
+	list := NewList(iterableItems(args[0])).AsList()
 	testName := ""
 	if len(args) > 1 && args[1].IsString() {
 		testName = args[1].AsString()
@@ -1110,11 +1242,11 @@ func filterSelect(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func filterReject(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
+	if len(args) == 0 {
 		return NewList(nil), nil
 	}
 
-	list := args[0].AsList()
+	list := NewList(iterableItems(args[0])).AsList()
 	testName := ""
 	if len(args) > 1 && args[1].IsString() {
 		testName = args[1].AsString()
@@ -1146,11 +1278,11 @@ func filterReject(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func filterSelectattr(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) < 2 || !args[0].IsList() {
+	if len(args) < 2 {
 		return NewList(nil), nil
 	}
 
-	list := args[0].AsList()
+	list := NewList(iterableItems(args[0])).AsList()
 	attrName := printValue(args[1])
 	testName := "truthy"
 	if len(args) > 2 {
@@ -1164,12 +1296,7 @@ func filterSelectattr(args []Value, kwargs map[string]Value) (Value, error) {
 
 	var items []Value
 	for _, item := range list.Items {
-		attrVal := Undefined()
-		if item.IsDict() {
-			if v, ok := item.AsDict().Get(attrName); ok {
-				attrVal = v
-			}
-		}
+		attrVal := builtinAttribute(item, attrName, Undefined())
 
 		if testName == "truthy" {
 			if attrVal.IsTruthy() {
@@ -1190,11 +1317,11 @@ func filterSelectattr(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func filterRejectattr(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) < 2 || !args[0].IsList() {
+	if len(args) < 2 {
 		return NewList(nil), nil
 	}
 
-	list := args[0].AsList()
+	list := NewList(iterableItems(args[0])).AsList()
 	attrName := printValue(args[1])
 	testName := "truthy"
 	if len(args) > 2 {
@@ -1208,12 +1335,7 @@ func filterRejectattr(args []Value, kwargs map[string]Value) (Value, error) {
 
 	var items []Value
 	for _, item := range list.Items {
-		attrVal := Undefined()
-		if item.IsDict() {
-			if v, ok := item.AsDict().Get(attrName); ok {
-				attrVal = v
-			}
-		}
+		attrVal := builtinAttribute(item, attrName, Undefined())
 
 		if testName == "truthy" {
 			if !attrVal.IsTruthy() {
@@ -1239,12 +1361,12 @@ func filterIndent(args []Value, kwargs map[string]Value) (Value, error) {
 	}
 
 	s := printValue(args[0])
-	width := 4
-	if len(args) > 1 {
-		width = int(toInt64(args[1]))
-	}
-	if w, ok := kwargs["width"]; ok {
-		width = int(toInt64(w))
+	width := builtinArgument(args, kwargs, 1, "width", NewInt(4))
+	pad := ""
+	if width.IsString() {
+		pad = width.AsString()
+	} else {
+		pad = strings.Repeat(" ", max(0, int(toInt64(width))))
 	}
 
 	indentFirst := false
@@ -1255,13 +1377,15 @@ func filterIndent(args []Value, kwargs map[string]Value) (Value, error) {
 		indentFirst = f.IsTruthy()
 	}
 
-	pad := strings.Repeat(" ", width)
+	blank := builtinArgument(args, kwargs, 3, "blank", NewBool(false)).IsTruthy()
+	// Python splitlines normalizes all line boundaries, including CRLF.
+	s = strings.NewReplacer("\r\n", "\n", "\r", "\n", "\v", "\n", "\f", "\n", "\x1c", "\n", "\x1d", "\n", "\x1e", "\n", "\u0085", "\n", "\u2028", "\n", "\u2029", "\n").Replace(s)
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
 		if i == 0 && !indentFirst {
 			continue
 		}
-		if line != "" {
+		if line != "" || blank || (i == 0 && indentFirst) {
 			lines[i] = pad + line
 		}
 	}
@@ -1273,7 +1397,9 @@ func filterWordcount(args []Value, kwargs map[string]Value) (Value, error) {
 	if len(args) == 0 {
 		return NewInt(0), nil
 	}
-	words := strings.Fields(printValue(args[0]))
+	words := strings.FieldsFunc(printValue(args[0]), func(r rune) bool {
+		return r != '_' && !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
 	return NewInt(int64(len(words))), nil
 }
 
@@ -1285,7 +1411,7 @@ func filterEscape(args []Value, kwargs map[string]Value) (Value, error) {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, `"`, "&quot;")
+	s = strings.ReplaceAll(s, `"`, "&#34;")
 	s = strings.ReplaceAll(s, "'", "&#39;")
 	return NewString(s), nil
 }
@@ -1320,66 +1446,67 @@ func filterDictsort(args []Value, kwargs map[string]Value) (Value, error) {
 }
 
 func filterMax(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
-		return Undefined(), nil
-	}
-
-	list := args[0].AsList()
-	if list.Len() == 0 {
-		return Undefined(), nil
-	}
-
-	maxVal := list.Items[0]
-	for _, item := range list.Items[1:] {
-		if order, ordered := compareValues(item, maxVal); ordered && order > 0 {
-			maxVal = item
-		}
-	}
-
-	return maxVal, nil
+	return filterExtremum(args, kwargs, 1)
 }
 
 func filterMin(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
+	return filterExtremum(args, kwargs, -1)
+}
+
+func filterExtremum(args []Value, kwargs map[string]Value, direction int) (Value, error) {
+	if len(args) == 0 {
 		return Undefined(), nil
 	}
-
-	list := args[0].AsList()
-	if list.Len() == 0 {
+	items := iterableItems(args[0])
+	if len(items) == 0 {
 		return Undefined(), nil
 	}
-
-	minVal := list.Items[0]
-	for _, item := range list.Items[1:] {
-		if order, ordered := compareValues(item, minVal); ordered && order < 0 {
-			minVal = item
+	attribute := builtinArgument(args, kwargs, 2, "attribute", None())
+	caseSensitive := builtinArgument(args, kwargs, 1, "case_sensitive", NewBool(false)).IsTruthy()
+	key := func(item Value) Value {
+		if !attribute.IsNone() {
+			item = builtinAttribute(item, printValue(attribute), Undefined())
+		}
+		if !caseSensitive && item.IsString() {
+			item = NewString(strings.ToLower(item.AsString()))
+		}
+		return item
+	}
+	best, bestKey := items[0], key(items[0])
+	for _, item := range items[1:] {
+		itemKey := key(item)
+		if order, ordered := compareValues(itemKey, bestKey); ordered && order*direction > 0 {
+			best, bestKey = item, itemKey
 		}
 	}
-
-	return minVal, nil
+	return best, nil
 }
 
 func filterSum(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) == 0 || !args[0].IsList() {
-		return NewInt(0), nil
+	sum := builtinArgument(args, kwargs, 2, "start", NewInt(0))
+	if len(args) == 0 {
+		return sum, nil
 	}
-
-	sum := NewInt(0)
-	for _, item := range args[0].AsList().Items {
-		if item.IsInt() || item.IsFloat() {
-			sum = addValues(sum, item)
+	attribute := builtinArgument(args, kwargs, 1, "attribute", None())
+	for _, item := range iterableItems(args[0]) {
+		if !attribute.IsNone() {
+			item = builtinAttribute(item, printValue(attribute), Undefined())
 		}
+		if !(item.IsNumber() || item.IsBool()) || !(sum.IsNumber() || sum.IsBool()) {
+			return Undefined(), fmt.Errorf("sum: expected numeric values")
+		}
+		sum = addValues(sum, item)
 	}
 	return sum, nil
 }
 
 func filterBatch(args []Value, kwargs map[string]Value) (Value, error) {
-	if len(args) < 2 || !args[0].IsList() {
+	if len(args) == 0 {
 		return NewList(nil), nil
 	}
 
-	list := args[0].AsList()
-	linecount := int(toInt64(args[1]))
+	list := NewList(iterableItems(args[0])).AsList()
+	linecount := int(toInt64(builtinArgument(args, kwargs, 1, "linecount", NewInt(0))))
 	if linecount <= 0 {
 		return NewList(nil), nil
 	}
@@ -1389,6 +1516,12 @@ func filterBatch(args []Value, kwargs map[string]Value) (Value, error) {
 		end := min(i+linecount, list.Len())
 		batch := make([]Value, end-i)
 		copy(batch, list.Items[i:end])
+		fill := builtinArgument(args, kwargs, 2, "fill_with", None())
+		if !fill.IsNone() {
+			for len(batch) < linecount {
+				batch = append(batch, fill)
+			}
+		}
 		batches = append(batches, NewList(batch))
 	}
 
@@ -1398,6 +1531,67 @@ func filterBatch(args []Value, kwargs map[string]Value) (Value, error) {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+func builtinArgument(args []Value, kwargs map[string]Value, index int, name string, fallback Value) Value {
+	if value, ok := kwargs[name]; ok {
+		return value
+	}
+	if len(args) > index {
+		return args[index]
+	}
+	return fallback
+}
+
+func iterableItems(v Value) []Value {
+	switch {
+	case v.IsList():
+		return v.AsList().Items
+	case v.IsDict():
+		items := make([]Value, len(v.AsDict().Keys))
+		for i, key := range v.AsDict().Keys {
+			items[i] = NewString(key)
+		}
+		return items
+	case v.IsString():
+		var items []Value
+		for _, r := range v.AsString() {
+			items = append(items, NewString(string(r)))
+		}
+		return items
+	}
+	return nil
+}
+
+func builtinAttribute(v Value, path string, fallback Value) Value {
+	for _, part := range strings.Split(path, ".") {
+		if v.IsDict() {
+			v, _ = v.AsDict().Get(part)
+		} else if index, err := strconv.Atoi(part); err == nil && index >= 0 {
+			items := iterableItems(v)
+			v = Undefined()
+			if index < len(items) {
+				v = items[index]
+			}
+		} else {
+			v = Undefined()
+		}
+		if v.IsUndefined() {
+			v = fallback
+		}
+	}
+	return v
+}
+
+func builtinFloat(v Value) (float64, bool) {
+	if v.IsNumber() || v.IsBool() {
+		return toFloat64(v), true
+	}
+	if v.IsString() {
+		f, err := strconv.ParseFloat(strings.TrimSpace(v.AsString()), 64)
+		return f, err == nil || math.IsInf(f, 0)
+	}
+	return 0, false
+}
 
 func toInt64(v Value) int64 {
 	switch {
@@ -1442,6 +1636,19 @@ func toFloat64(v Value) float64 {
 // compareValues returns the ordering and whether the values are ordered.
 // A comparison involving a floating-point NaN is unordered.
 func compareValues(a, b Value) (int, bool) {
+	if a.IsString() && b.IsString() {
+		return strings.Compare(a.AsString(), b.AsString()), true
+	}
+	if a.IsList() && b.IsList() {
+		left, right := a.AsList().Items, b.AsList().Items
+		for i := range min(len(left), len(right)) {
+			if left[i].Equals(right[i]) {
+				continue
+			}
+			return compareValues(left[i], right[i])
+		}
+		return cmp.Compare(len(left), len(right)), true
+	}
 	if (a.IsFloat() && math.IsNaN(a.AsFloat())) || (b.IsFloat() && math.IsNaN(b.AsFloat())) {
 		return 0, false
 	}
@@ -1504,50 +1711,16 @@ func containsValue(container, item Value) bool {
 	return false
 }
 
-// valueToGo converts a Value back to a plain Go type suitable for
-// json.Marshal.
-func valueToGo(v Value) any {
-	switch v.kind {
-	case KindUndefined, KindNone:
-		return nil
-	case KindBool:
-		return v.AsBool()
-	case KindInt:
-		return v.AsInt()
-	case KindFloat:
-		return v.AsFloat()
-	case KindString:
-		return v.AsString()
-	case KindList:
-		list := v.AsList()
-		out := make([]any, list.Len())
-		for i, item := range list.Items {
-			out[i] = valueToGo(item)
-		}
-		return out
-	case KindDict:
-		d := v.AsDict()
-		out := make(map[string]any, d.Len())
-		for _, key := range d.Keys {
-			out[key] = valueToGo(d.Data[key])
-		}
-		return out
-	case KindCallable:
-		return nil
-	}
-	return nil
-}
-
 // printValue converts a Value to its template output string. Unlike
 // String() which returns a Python-style repr, printValue returns the
 // raw text for template rendering (no quotes around strings, empty
-// string for None/Undefined).
+// string for Undefined).
 func printValue(v Value) string {
 	switch v.kind {
 	case KindUndefined:
 		return ""
 	case KindNone:
-		return ""
+		return "None"
 	case KindBool:
 		if v.AsBool() {
 			return "True"
@@ -1556,9 +1729,7 @@ func printValue(v Value) string {
 	case KindInt:
 		return fmt.Sprintf("%d", v.AsInt())
 	case KindFloat:
-		f := v.AsFloat()
-		s := fmt.Sprintf("%g", f)
-		return s
+		return pythonFloat(v.AsFloat())
 	case KindString:
 		return v.AsString()
 	case KindList:
@@ -1569,4 +1740,25 @@ func printValue(v Value) string {
 		return ""
 	}
 	return ""
+}
+
+func pythonFloat(f float64) string {
+	if math.IsNaN(f) {
+		return "nan"
+	}
+	if math.IsInf(f, 1) {
+		return "inf"
+	}
+	if math.IsInf(f, -1) {
+		return "-inf"
+	}
+	format := byte('f')
+	if a := math.Abs(f); a != 0 && (a < 1e-4 || a >= 1e16) {
+		format = 'e'
+	}
+	s := strconv.FormatFloat(f, format, -1, 64)
+	if !strings.ContainsAny(s, ".e") {
+		s += ".0"
+	}
+	return s
 }

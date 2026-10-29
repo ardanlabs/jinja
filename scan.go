@@ -1,7 +1,10 @@
 // Package jinja implements a Jinja2-compatible template engine.
 package jinja
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // segKind identifies the type of a scanned template segment.
 type segKind int
@@ -19,6 +22,8 @@ type segment struct {
 	text      string // Content between delimiters (tags) or raw text.
 	trimLeft  bool   // {%- / {{- / {#- was used.
 	trimRight bool   // -%} / -}} / -#} was used.
+	keepLeft  bool   // {%+ disables lstrip_blocks for this tag.
+	keepRight bool   // +%} disables trim_blocks for this tag.
 	line      int    // 1-based line number where the segment starts.
 	col       int    // 1-based column number where the segment starts.
 }
@@ -35,8 +40,27 @@ func scan(source string) ([]segment, error) {
 	textStart := 0
 	textLine := 1
 	textCol := 1
+	raw := false
 
 	for i < len(source) {
+		if raw {
+			end := -1
+			if strings.HasPrefix(source[i:], "{%") {
+				end = strings.Index(source[i+2:], "%}")
+			}
+			if end >= 0 && strings.TrimSpace(strings.Trim(strings.TrimSpace(source[i+2:i+2+end]), "-+")) == "endraw" {
+				raw = false
+			} else {
+				if source[i] == '\n' {
+					line++
+					col = 1
+				} else {
+					col++
+				}
+				i++
+				continue
+			}
+		}
 		// Look for a two-character tag opener starting with '{'.
 		if source[i] != '{' || i+1 >= len(source) {
 			if source[i] == '\n' {
@@ -93,8 +117,10 @@ func scan(source string) ([]segment, error) {
 
 		// Check for the trim flag immediately after the opener.
 		trimLeft := false
-		if i < len(source) && source[i] == '-' {
-			trimLeft = true
+		keepLeft := false
+		if i < len(source) && (source[i] == '-' || source[i] == '+') {
+			trimLeft = source[i] == '-'
+			keepLeft = source[i] == '+'
 			i++
 			col++
 		}
@@ -104,6 +130,7 @@ func scan(source string) ([]segment, error) {
 		// Scan forward for the matching closer, respecting quoted strings.
 		trimRight := false
 		found := false
+		depth := 0
 
 		for i < len(source) {
 			ch := source[i]
@@ -147,8 +174,8 @@ func scan(source string) ([]segment, error) {
 			}
 
 			// Check for trim-right flag followed by the closer.
-			if ch == '-' && i+2 < len(source) && source[i+1] == closer[0] && source[i+2] == closer[1] {
-				trimRight = true
+			if depth == 0 && (ch == '-' || ch == '+') && i+2 < len(source) && source[i+1] == closer[0] && source[i+2] == closer[1] {
+				trimRight = ch == '-'
 				contentEnd := i
 				i += 3
 				col += 3
@@ -158,6 +185,8 @@ func scan(source string) ([]segment, error) {
 					text:      source[contentStart:contentEnd],
 					trimLeft:  trimLeft,
 					trimRight: trimRight,
+					keepLeft:  keepLeft,
+					keepRight: ch == '+',
 					line:      tagLine,
 					col:       tagCol,
 				})
@@ -166,7 +195,7 @@ func scan(source string) ([]segment, error) {
 			}
 
 			// Check for the two-character closer.
-			if i+1 < len(source) && ch == closer[0] && source[i+1] == closer[1] {
+			if depth == 0 && i+1 < len(source) && ch == closer[0] && source[i+1] == closer[1] {
 				contentEnd := i
 				i += 2
 				col += 2
@@ -176,6 +205,7 @@ func scan(source string) ([]segment, error) {
 					text:      source[contentStart:contentEnd],
 					trimLeft:  trimLeft,
 					trimRight: trimRight,
+					keepLeft:  keepLeft,
 					line:      tagLine,
 					col:       tagCol,
 				})
@@ -183,6 +213,14 @@ func scan(source string) ([]segment, error) {
 				break
 			}
 
+			if kind != segComment {
+				switch ch {
+				case '(', '[', '{':
+					depth++
+				case ')', ']', '}':
+					depth--
+				}
+			}
 			if ch == '\n' {
 				line++
 				col = 1
@@ -204,6 +242,9 @@ func scan(source string) ([]segment, error) {
 		}
 
 		// Next text segment starts here.
+		if kind == segStmt && strings.TrimSpace(segs[len(segs)-1].text) == "raw" {
+			raw = true
+		}
 		textStart = i
 		textLine = line
 		textCol = col

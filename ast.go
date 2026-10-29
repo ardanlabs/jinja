@@ -173,6 +173,15 @@ type binExpr struct {
 func (n *binExpr) nodeType() string { return "binary" }
 func (n *binExpr) exprNode()        {}
 
+// compareExpr evaluates a comparison chain once per operand, short-circuiting.
+type compareExpr struct {
+	operands []expr
+	ops      []string
+}
+
+func (n *compareExpr) nodeType() string { return "compare" }
+func (n *compareExpr) exprNode()        {}
+
 // condExpr represents an inline ternary (a if cond else b).
 type condExpr struct {
 	trueExpr  expr
@@ -224,6 +233,7 @@ func (n *testExpr) exprNode()        {}
 // listExpr represents an array literal [a, b, c].
 type listExpr struct {
 	items []expr
+	tuple bool
 }
 
 func (n *listExpr) nodeType() string { return "list" }

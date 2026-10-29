@@ -1,0 +1,408 @@
+{% set plan_revision = 7 %}{{ '# 5G SA commissioning plan, revision ' ~ plan_revision }}   {% if plan_revision > 1 %}(supersedes r{{ plan_revision - 1 }}){% endif %} for the isolated lab
+{# Metro edge 5G SA commissioning plan, isolated lab profile. #}
+{# All inventory is declared here; the plan renders without input data. #}
+{% set plan_name = 'metro-edge-acceptance' %}
+{% set operator_label = "operator's metro EDGE lab" %}
+{% set summary = 'standalone core and NR radio commissioning for the metro edge' %}
+{% set change = {'id': 'CHG-2026-1015', 'owner': 'mobile-platform', 'environment': 'isolated-lab'} %}
+{% set rollback_ticket = none %}
+{% set vendor_label = 'Acme "NR" edge' %}
+{% set site_notes = ["operator's rack", 'row 3\nslot 2', 'C:\\racks\\nr'] %}
+{% set plmn = {'mcc': '001', 'mnc': '01'} %}
+{% set apn = 'ims.mnc001.mcc001.gprs' %}
+{% set domain = 'core.example.test' %}
+{% set resolvers = ['192.0.2.53', '192.0.2.54'] %}
+{% set secondary_resolver = '192.0.2.54' %}
+{% set time_sources = ['192.0.2.123', '192.0.2.124'] %}
+{% set ptp_profile = {'name': 'ptp-lab', 'domain': 24} %}
+{% set reference_clock_hz = 10000000.0 %}
+{% set frame_duration_ms = 10 %}
+{% set slot_duration_ms = 0.5 %}
+{% set timing_offset_slots = -7 %}
+{% set uplink_symbols = 7 %}
+{% set cyclic_prefix_us = 5.5 %}
+{% set n2_address = '192.0.2.30' %}
+{% set interface_pairs = [['n2', 'n3']] %}
+{% set n3_endpoints = ['198.51.100.40', '198.51.100.41'] %}
+{% set installed_firmware = '10.2' %}
+{% set minimum_firmware = '9.4' %}
+{% set installed_patch = [10, 2] %}
+{% set required_patch = [10, 4] %}
+{% set cpu_request_millicores = 1210 %}
+{% set cpu_limit_millicores = 1290 %}
+{% set cpu_weight = 1.0 %}
+{% set base_replicas = 3 %}
+{% set surge_replicas = 1 %}
+{% set deployment_order = ['nrf', 'ausf', 'udm', 'pcf', 'amf', 'smf', 'upf'] %}
+{% set zones = ['edge-a', 'edge-b', 'edge-c'] %}
+{% set network_functions = [
+  {'name': 'nrf', 'octet': 10, 'replicas': 3, 'ha': true},
+  {'name': 'ausf', 'octet': 11, 'replicas': 3, 'ha': true},
+  {'name': 'udm', 'octet': 12, 'replicas': 3, 'ha': true},
+  {'name': 'udr', 'octet': 13, 'replicas': 3, 'ha': true},
+  {'name': 'pcf', 'octet': 14, 'replicas': 3, 'ha': true},
+  {'name': 'nssf', 'octet': 15, 'replicas': 2, 'ha': false},
+  {'name': 'amf', 'octet': 16, 'replicas': 3, 'ha': true},
+  {'name': 'smf', 'octet': 17, 'replicas': 3, 'ha': true},
+  {'name': 'upf', 'octet': 18, 'replicas': 4, 'ha': true},
+  {'name': 'bsf', 'octet': 19, 'replicas': 2, 'ha': false},
+  {'name': 'nef', 'octet': 20, 'replicas': 2, 'ha': false},
+  {'name': 'scp', 'octet': 21, 'replicas': 3, 'ha': true}
+] %}
+{% set nf_replicas = {'upf': 4, 'amf': 3, 'smf': 3, 'nrf': 3} %}
+{% set slices = [
+  {'name': 'embb', 'sst': 1, 'sd': '000001', 'dnn': 'internet', 'policy': {'dnn': 'internet', 'enabled': true}},
+  {'name': 'urllc', 'sst': 2, 'sd': '000002', 'dnn': 'industrial', 'policy': {'dnn': 'industrial', 'enabled': true}},
+  {'name': 'mmtc', 'sst': 3, 'sd': '000003', 'dnn': 'iot', 'policy': {'enabled': false}},
+  {'name': 'voice', 'sst': 1, 'sd': '000004', 'dnn': 'ims', 'policy': {'dnn': 'ims', 'enabled': true}}
+] %}
+{% set dnn_aliases = ['IMS', 'ims', 'internet'] %}
+{% set requested_dnn = '' %}
+{% set dnn_input = '  ims  ' %}
+{% set vendor_dnn_field = '\x1cims\x1f' %}
+{% set dnn_routes = [('internet', true), ('ims', false), ('iot', true)] %}
+{% set qos_default_pairs = [('qfi', 9), ('arp', 8)] %}
+{% set requested_arp = 'auto' %}
+{% set backhaul_links = [{'name': 'bh-1', 'mbps': 10000}, {'name': 'bh-2', 'mbps': 25000}] %}
+{% set reserved_mbps = 1000 %}
+{% set extra_session_packs = [] %}
+{% set upf_pools = [{'name': 'metro-edge', 'capacity': 40}, {'name': 'metro-core', 'capacity': 100}, {'name': 'suburban', 'capacity': 25}] %}
+{% set channel_bandwidth_mhz = 100 %}
+{% set component_carriers = [1, 2, 3] %}
+{% set utilization_percent = 85 %}
+{% set alarm_percent = 80 %}
+{% set rx_gain_db = 3 %}
+{% set tx_power_override = 'auto' %}
+{% set site_mnemonic = 'MetroEdgeLab' %}
+{% set reference_tac = '000001' %}
+{% set cell_ids = [101, 102, 103, 104] %}
+{% set max_cell_index = 100 %}
+{% set site_code = 'Évry-1' %}
+{% set band_plan = 'n78/n78/n41' %}
+{% set cell_label = 'NR-cell-07' %}
+{% set vendor_cell_label = 'c1NR-metro' %}
+{% set tokyo_cell = '東京-nr-nr' %}
+{% set rat_code = 'NR' %}
+{% set vendor_suffix = '' %}
+{% set tokyo_label = '　東京-edge　' %}
+{% set tokyo_display = '東京📡' %}
+{% set cli_line = '  interface   n3  ' %}
+{% set alarm_text = 'transport-down,loss-of-sync' %}
+{% set dscp_marking = 'ef' %}
+{% set voice_priority = true %}
+{% set sector_letters = 'ABCDEF' %}
+{% set radio_sites = [
+  {'name': 'metro-001', 'gnb_id': 1001, 'tac': '000001', 'region': 'metro', 'zone': 'edge-a', 'dense': true},
+  {'name': 'metro-002', 'gnb_id': 1002, 'tac': '000002', 'region': 'metro', 'zone': 'edge-a', 'dense': true},
+  {'name': 'metro-003', 'gnb_id': 1003, 'tac': '000003', 'region': 'metro', 'zone': 'edge-a', 'dense': false},
+  {'name': 'metro-004', 'gnb_id': 1004, 'tac': '000004', 'region': 'metro', 'zone': 'edge-b', 'dense': false},
+  {'name': 'metro-005', 'gnb_id': 1005, 'tac': '000005', 'region': 'metro', 'zone': 'edge-b', 'dense': false},
+  {'name': 'metro-006', 'gnb_id': 1006, 'tac': '000006', 'region': 'metro', 'zone': 'edge-b', 'dense': false},
+  {'name': 'metro-007', 'gnb_id': 1007, 'tac': '000007', 'region': 'metro', 'zone': 'edge-b', 'dense': false},
+  {'name': 'metro-008', 'gnb_id': 1008, 'tac': '000008', 'region': 'metro', 'zone': 'edge-b', 'dense': false},
+  {'name': 'sub-009', 'gnb_id': 1009, 'tac': '000009', 'region': 'suburban', 'zone': 'edge-c', 'dense': false},
+  {'name': 'sub-010', 'gnb_id': 1010, 'tac': '000010', 'region': 'suburban', 'zone': 'edge-c', 'dense': false},
+  {'name': 'sub-011', 'gnb_id': 1011, 'tac': '000011', 'region': 'suburban', 'zone': 'edge-c', 'dense': false},
+  {'name': 'sub-012', 'gnb_id': 1012, 'tac': '000012', 'region': 'suburban', 'zone': 'edge-c', 'dense': false}
+] %}
+{% set topology = [
+  {'name': 'metro-region', 'children': [
+    {'name': 'edge-a', 'children': [{'name': 'metro-001', 'children': []}, {'name': 'metro-002', 'children': []}, {'name': 'metro-003', 'children': []}]},
+    {'name': 'edge-b', 'children': [{'name': 'metro-004', 'children': []}, {'name': 'metro-005', 'children': []}]}
+  ]},
+  {'name': 'suburban-region', 'children': [
+    {'name': 'edge-c', 'children': [{'name': 'sub-009', 'children': []}, {'name': 'sub-010', 'children': []}]}
+  ]}
+] %}
+{% set upf_profile = {'nfInstanceName': 'upf-metro-01', 'nfType': 'UPF', 'nfStatus': 'REGISTERED', 'heartBeatTimer': 10, 'locality': 'metro & edge', 'load': 0.0} %}
+{% set nssf_payload = {'nfType': 'NSSF', 'amfSetId': '001', 'snssaiList': [{'sst': 1, 'sd': '000001'}, {'sst': 2, 'sd': '000002'}]} %}
+{% set n3_cli = 'interface n3\n  ip address 198.51.100.40/24\n\nexit' %}
+{% set change_notes = 'validated against lab-profile\nrollback via change ticket' %}
+{% set vendor_inventory = {'items': ['ru-1', 'ru-2'], 'vendor': 'acme', 'model': 'ru-4t4r'} %}
+{% set acceptance_check_names = ['registration', 'authentication', 'pdu-session', 'dns-resolution', 'n2-association', 'n3-forwarding', 'n4-heartbeat', 'sbi-discovery', 'policy-download', 'charging-report', 'handover', 'time-sync'] %}
+api_version: lab.provisioning/v1
+kind: Standalone5GCommissioningPlan
+metadata:
+  name: {{ plan_name }}
+  display_name: {{ operator_label.title() }}
+  summary: {{ summary.capitalize() }}
+  environment: {{ change.environment }}
+  env_prefix: "{% filter replace('-', '_')|upper %}{{ plan_name }}{% endfilter %}"
+  change_id: {{ change.id }}
+  owner: {{ change.owner }}
+  rollback_ticket: {{ rollback_ticket }}
+  html_label: "{{ vendor_label|e }}"
+  site_notes: {{ site_notes }}
+spec:
+  plmn:
+    mcc: "{{ plmn.mcc }}"
+    mnc: "{{ plmn.mnc }}"
+{% set mcc, mnc = plmn.mcc, plmn.mnc %}
+    plmn_id: "{{ mcc }}{{ mnc }}"
+    served_plmns: {{ (plmn.mcc ~ '-' ~ plmn.mnc,) }}
+    home_network: {{ (plmn.mcc, plmn.mnc, 'lab-core')[0:2] }}
+    apn_operator_identifier: {{ 'mnc001.' 'mcc001.' 'gprs' }}
+    ims_apn_oi: {{ apn.split('.', 1)[1] }}
+  release: "lab-profile"
+  deployment_order: [{{ deployment_order|join(', ') }}]
+  deployment_banner: "{{ deployment_order|map('upper')|join(' > ') }}"
+  teardown_order: [{{ deployment_order[none:none:-1]|join(', ') }}]
+  sbi_peers: "{% set comma = joiner() %}{% for nf in deployment_order %}{{ comma() }}{{ nf }}{% endfor %}"
+  dns:
+    domain: {{ domain }}
+    resolvers: [{{ resolvers|join(', ') }}]
+{% if secondary_resolver is sequence %}
+    secondary_resolver_labels: {{ secondary_resolver|length }}
+{% else %}
+    secondary_resolver_labels: 1
+{% endif %}
+  time_sync:
+    sources: [{{ time_sources|join(', ') }}]
+    profile: {{ ptp_profile.name }}
+    ptp_domain: {{ ptp_profile.domain }}
+{% if ptp_profile is sequence %}
+    profile_fields: {{ ptp_profile|length }}
+{% else %}
+    profile_fields: 1
+{% endif %}
+    reference_clock_hz: {{ reference_clock_hz }}
+  timing:
+    frame_duration_ms: {{ frame_duration_ms }}
+    slot_duration_ms: 0.5
+    slots_per_frame: {{ frame_duration_ms // slot_duration_ms }}
+    timing_offset_slots: {{ timing_offset_slots }}
+    offset_frames: {{ timing_offset_slots // 3 }}
+    sfn_phase: {{ timing_offset_slots % 3 }}
+    uplink_skew: {{ uplink_symbols % -3 }}
+    cyclic_prefix_remainder_us: {{ cyclic_prefix_us % 2 }}
+    target_bler: {{ 1e-3 }}
+  transport:
+    n2: {protocol: sctp, port: 38412}
+    n3: {protocol: udp, port: 2152}
+    n4: {protocol: udp, port: 8805}
+    n2_endpoint: "{{ n2_address }}"
+    n3_pair_member: {{ interface_pairs.0.1 }}
+    n3_secondary: {{ n3_endpoints.1 }}
+    n3_midpoint: "{{ n3_endpoints[n3_endpoints|length / 2] }}"
+    gtpu:
+      teid_space: {{ 2 ** 32 }}
+      buffer_slots: {{ 2 ** 3 ** 2 }}
+{% set ring = 2 ** 10 %}
+      rx_ring_entries: {{ ring if ring is integer else 'auto' }}
+  security:
+    certificate_issuer: lab-ca
+    sbi_tls: required
+    credential_reference: vault/mobile/lab
+    permitted_management: [192.0.2.0/24]
+    firmware:
+      installed: "{{ installed_firmware }}"
+      minimum: "{{ minimum_firmware }}"
+      upgrade_required: {{ installed_firmware < minimum_firmware }}
+      below_floor: {{ installed_firmware is lt(minimum_firmware) }}
+      patch_behind: {{ installed_patch < required_patch }}
+      patch_below_floor: {{ installed_patch is lt(required_patch) }}
+  resource_defaults:
+    cpu_request_cores: {{ (cpu_request_millicores / 1000)|round(1, 'ceil') }}
+    cpu_limit_cores: {{ (cpu_limit_millicores / 1000)|round(1, 'floor') }}
+    cpu_weight: {{ cpu_weight }}
+    hugepages_1gi: 4
+    replica_check: {{ base_replicas + surge_replicas is integer }}
+{% set standby_zones = zones|list %}
+    standby_zones_shared: {{ standby_zones is sameas(zones) }}
+  network_functions:
+{% for nf in network_functions %}
+    - name: {{ nf.name }}
+      service_name: {{ nf.name }}.{{ domain }}
+      replicas: {{ nf.replicas }}
+      management_address: 192.0.2.{{ nf.octet }}
+      cluster_address: 198.51.100.{{ nf.octet }}
+      cpu_request: "2"
+      memory_request: 4Gi
+      readiness_path: /health/ready
+      liveness_path: /health/live
+      metrics_path: /metrics
+      zone_spread: [{{ zones|join(', ') }}]
+      restart_policy: Always
+      logging: {level: info, format: json}
+      tls_secret: core-services-tls
+      maintenance: {max_unavailable: 1, drain_seconds: 60}
+      ha_weight: {{ +nf.ha }}
+      failover_bias: {{ -nf.ha }}
+{% if loop.index is divisibleby(4) %}
+      rack_boundary: true
+{% endif %}
+{% endfor %}
+  nf_summary:
+    functions: {{ nf_replicas|join(', ') }}
+    primary_function: {{ nf_replicas|first }}
+    last_function: {{ nf_replicas|last }}
+{% macro nf_group(name) %}{{ name }}: {{ varargs|join(', ') }}{% if kwargs.get('critical') %} (critical){% endif %}{% endmacro %}
+    control_plane: "{{ nf_group('core', 'amf', 'smf', 'nrf', critical=true) }}"
+    vendor_inventory_fields: {{ vendor_inventory.items()|list|length }}
+  replica_plan:
+{% for nf, count in dict(upf=4, amf=3, smf=3, nrf=3, ausf=3, udm=3, pcf=3, nssf=2).items() %}
+    {{ nf }}: {{ count }}
+{% endfor %}
+{% macro snssai_label(parts=['01', '000001'], separator='-') %}{{ parts|join(separator) }}{% endmacro %}
+  default_snssai: "{{ snssai_label() }}"
+  slices:
+{% for slice in slices %}
+    - name: {{ slice.name }}
+      snssai: {sst: {{ slice.sst }}, sd: "{{ slice.sd }}"}
+      dnn: {{ slice.dnn }}
+      enabled: true
+      session_type: IPV4V6
+      continuity_mode: SSC1
+      admission: {maximum_sessions: 10000, alarm_percent: 80}
+      charging: {mode: offline, reporting_seconds: 30}
+      qos: {default_qfi: 9, arp: 8, preemption: disabled}
+      dns: [{{ resolvers|join(', ') }}]
+      upf_pool: metro-edge
+      policy_version: stable
+      route_target: "65000:100"
+{% if slice.sst is eq 1 %}
+      broadband_profile: true
+{% endif %}
+{% endfor %}
+  slice_summary:
+    reference_profile: {{ {'snssai': {'sst': 1, 'sd': '000001'}}}}
+    reference_sd: {{ '0x0000ff'|int(base=16) }}
+    policy_dnns: {{ slices|map(attribute='policy.dnn', default='internet')|join(',') }}
+    active_policies: {{ slices|selectattr('policy.enabled')|list|length }}
+    inactive_policies: {{ slices|rejectattr('policy.enabled')|list|length }}
+    dnn_catalog: {{ dnn_aliases|unique|join(',') }}
+    fallback_dnn: {{ requested_dnn|default(default_value='internet', boolean=true) }}
+    normalized_dnn: {{ dnn_input.strip(none) }}
+    vendor_dnn: {{ vendor_dnn_field.strip() }}
+{% set admission = namespace({'admitted': 0, 'limit': 10000}) %}
+    admission_limit: {{ admission.limit }}
+    dnn_routes:
+{% for dnn, enabled in dnn_routes if enabled %}
+      - "{{ loop.index }}/{{ loop.length }} {{ dnn }}"
+{% else %}
+      - none
+{% endfor %}
+  qos_profiles:
+    default: {qfi: 9, arp: 8}
+    voice: {{ dict(qos_default_pairs, qfi=1) }}
+    requested_arp: {{ requested_arp|int(default=9) }}
+  capacity:
+    total_backhaul_mbps: {{ backhaul_links|sum(attribute='mbps', start=reserved_mbps) }}
+    licensed_sessions: {{ extra_session_packs|sum(start=10000) }}
+    largest_upf_pool: {{ (upf_pools|max(attribute='capacity')).name }}
+    carrier_groups: {{ (channel_bandwidth_mhz / 40)|round }}
+    carrier_pairs: {{ component_carriers|batch(2, 0)|map('list')|list }}
+    utilization_percent: {{ utilization_percent }}
+    alarm_percent: {{ alarm_percent }}
+    within_admission_window: {{ 0 < utilization_percent < alarm_percent }}
+{% set utilization_guard = utilization_percent < 0 < raise_exception('utilization cannot be negative') %}
+    rx_attenuation_db: {{ -rx_gain_db|abs }}
+  radio_defaults:
+    band: n78
+    duplex: TDD
+    nominal_carrier_hz: {{ 3e9|int }}
+    tx_power_dbm: {{ tx_power_override|float(default=23.5) }}
+    radio_access_technology: "{{ '5G\x20\u004e\122' }}"
+    site_initials: {{ site_mnemonic|select('upper')|join }}
+    tac_digits: {{ reference_tac|join('.') }}
+    tac_case: {{ [reference_tac is upper, reference_tac is lower] }}
+    standby_cells: {{ cell_ids[max_cell_index:-max_cell_index:-2] }}
+    mirrored_site_code: {{ site_code[max_cell_index:-max_cell_index:-2] }}
+    region_initial: {{ site_code|first }}
+    serial_suffix: "{{ 'RU4T4R-0042'[11 / 2:] }}"
+    primary_band_n78_count: {{ band_plan.count('n78', 3, 7) }}
+  cell_labels:
+    primary: "{{ cell_label }}"
+    rat_prefixed: {{ cell_label.startswith(('LTE', 'NR')) }}
+    vendor_prefixed: {{ vendor_cell_label.startswith('NR', 2, 4) }}
+    cell_suffixed: {{ cell_label.endswith('cell', 0, 7) }}
+    tokyo_rat_position: {{ tokyo_cell.find('nr', 4) }}
+    vendor_suffix_position: {{ rat_code.find(vendor_suffix, 3) }}
+    tokyo_label: {{ tokyo_label.lstrip().rstrip() }}
+    tokyo_label_ascii: {{ {'site': tokyo_display}|tojson(ensure_ascii=true) }}
+    cli_command: {{ cli_line.split(none, 1)|first }}
+    alarm_tokens: {{ alarm_text|wordcount }}
+  radio_sites:
+{% for site in radio_sites %}
+{% if loop.changed(site.region) %}
+    # region: {{ site.region }}
+{% endif %}
+    - name: {{ site.name }}
+      gnb_id: {{ site.gnb_id }}
+      cell_name: {{ 'cell-%02d' % loop.index }}
+      tracking_area: "{{ site.tac }}"
+      enabled: true
+      region: {{ site.region }}
+      zone: {{ site.zone }}
+      band: n78
+      duplex: TDD
+      channel_bandwidth_mhz: {{ channel_bandwidth_mhz }}
+      subcarrier_spacing_khz: 30
+      antenna_ports: 4
+      operational_state: unlocked
+      administrative_state: planned
+      transport_mtu: 1500
+      n2_amf_pool: metro-amf
+      n3_upf_pool: metro-edge
+      timing_source: ptp-lab
+      synchronization_alarm: enabled
+      handover: {enabled: true, hysteresis_db: 3}
+      neighbor_policy: same-region
+      cell_reselection: enabled
+      paging: {cycle: 128, priority: normal}
+      telemetry: {period_seconds: 15, destination: collector.example.test}
+      alarms: [loss-of-sync, transport-down, overload]
+      maintenance: {window: sunday-0200, drain_seconds: 120}
+      acceptance:
+        registration: required
+        pdu_session: required
+        uplink_probe: required
+        downlink_probe: required
+        mobility_probe: required
+{% endfor %}
+  handover_profiles:
+{% set handover_profile = 'standard' %}
+{% for site in radio_sites %}
+{% if site.dense %}
+{% set handover_profile = 'dense-urban' %}
+{% endif %}
+    {{ site.name }}: {{ handover_profile }}
+{% endfor %}
+  topology:
+{% for node in topology recursive %}
+    {{ '  ' * loop.depth0 }}- {{ node.name }}
+{% if node.children %}{{ loop(node.children) }}{% endif %}
+{% endfor %}
+  sector_selection:
+{% set trace = namespace(calls=0, order='') %}
+{% macro bound(label, value) %}{% set trace.calls = trace.calls + 1 %}{% set trace.order = trace.order ~ label %}{{ value }}{% endmacro %}
+    sampled_sectors: {{ sector_letters[bound('a', 0)|int:bound('b', 6)|int:bound('c', 2)|int] }}
+    selection_trace: "{{ trace.calls }}:{{ trace.order }}"
+  api_payloads:
+    nssf_canonical: {{ nssf_payload|tojson(sort_keys=true) }}
+    radio_power: {{ {'band': 'n78', 'max_eirp_dbm': 1.0}|tojson }}
+    nrf_registration: |
+      {{ upf_profile|tojson(indent=2)|indent(6) }}
+  vendor_cli:
+    n3_interface: |
+{{ n3_cli|indent(6, first=true, blank=true) }}
+    egress_policy: |
+      policy-map n3-egress
+        {%+ if dscp_marking %}set dscp {{ dscp_marking }}{% endif %} ! n3 marking
+      class voice{% if voice_priority +%}
+        priority level 1{% endif %} ! voice
+    change_notes: |
+{{ change_notes|indent('      # ', first=true) }}
+    log_filter: "{% raw %}sed 's/{{//g'{% endraw %}"
+  vendor_extensions:
+{% block vendor_extensions %}
+    hooks: []
+{% endblock %}
+  acceptance_checks:
+{% set check_counter = namespace(n=0) %}
+{% for site in radio_sites[:2] %}
+{% for check in acceptance_check_names %}
+{% set check_counter.n = check_counter.n + 1 %}
+    - {name: {{ check }}-{{ check_counter.n }}, target: {{ site.name }}, required: true}
+{% endfor %}
+{% endfor %}

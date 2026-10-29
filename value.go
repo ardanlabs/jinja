@@ -194,10 +194,10 @@ func (v Value) string(ancestors []any) string {
 		return fmt.Sprintf("%d", v.v.(int64))
 
 	case KindFloat:
-		return fmt.Sprintf("%g", v.v.(float64))
+		return printValue(v)
 
 	case KindString:
-		return fmt.Sprintf("'%s'", v.v.(string))
+		return reprString(v.v.(string))
 
 	case KindList:
 		list := v.v.(*List)
@@ -206,14 +206,25 @@ func (v Value) string(ancestors []any) string {
 		}
 		ancestors = append(ancestors, list)
 		var b strings.Builder
-		b.WriteByte('[')
+		if list.tuple {
+			b.WriteByte('(')
+		} else {
+			b.WriteByte('[')
+		}
 		for i, item := range list.Items {
 			if i > 0 {
 				b.WriteString(", ")
 			}
 			b.WriteString(item.string(ancestors))
 		}
-		b.WriteByte(']')
+		if list.tuple {
+			if list.Len() == 1 {
+				b.WriteByte(',')
+			}
+			b.WriteByte(')')
+		} else {
+			b.WriteByte(']')
+		}
 		return b.String()
 
 	case KindDict:
@@ -228,7 +239,7 @@ func (v Value) string(ancestors []any) string {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			fmt.Fprintf(&b, "'%s': %s", key, d.Data[key].string(ancestors))
+			fmt.Fprintf(&b, "%s: %s", reprString(key), d.Data[key].string(ancestors))
 		}
 		b.WriteByte('}')
 		return b.String()
@@ -239,6 +250,34 @@ func (v Value) string(ancestors []any) string {
 	}
 
 	return "Undefined"
+}
+
+func reprString(s string) string {
+	quote := '\''
+	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
+		quote = '"'
+	}
+	var b strings.Builder
+	b.WriteRune(quote)
+	for _, r := range s {
+		switch {
+		case r == quote || r == '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\r':
+			b.WriteString(`\r`)
+		case r == '\t':
+			b.WriteString(`\t`)
+		case r < 32 || r == 127:
+			fmt.Fprintf(&b, `\x%02x`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteRune(quote)
+	return b.String()
 }
 
 // Equals reports whether v and other hold the same value. Numeric values
@@ -282,6 +321,9 @@ func (v Value) Equals(other Value) bool {
 	case KindList:
 		a := v.v.(*List)
 		b := other.v.(*List)
+		if a.tuple != b.tuple {
+			return false
+		}
 		if a == b {
 			return true
 		}
@@ -327,6 +369,7 @@ func (v Value) Equals(other Value) bool {
 // List holds an ordered sequence of values.
 type List struct {
 	Items []Value
+	tuple bool
 }
 
 // Len returns the number of items in the list.
