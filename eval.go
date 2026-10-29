@@ -329,6 +329,7 @@ func (e *evaluator) execMacro(n *macroNode) error {
 	params := n.params
 	body := n.body
 	parentScope := e.scope
+	acceptsKwargs := referencesName("kwargs", body...)
 
 	fn := NewCallable(n.name, func(args []Value, kwargs map[string]Value) (Value, error) {
 		child := newScope(parentScope)
@@ -336,6 +337,9 @@ func (e *evaluator) execMacro(n *macroNode) error {
 		// Bind positional args.
 		for i, param := range params {
 			if i < len(args) {
+				if _, duplicate := kwargs[param.name]; duplicate {
+					return Undefined(), fmt.Errorf("macro %s: multiple values for argument %q", n.name, param.name)
+				}
 				child.set(param.name, args[i])
 			} else if v, ok := kwargs[param.name]; ok {
 				child.set(param.name, v)
@@ -353,6 +357,9 @@ func (e *evaluator) execMacro(n *macroNode) error {
 		extra := NewDict()
 		for key, value := range kwargs {
 			if _, bound := child.vars[key]; !bound {
+				if !acceptsKwargs && key != "caller" {
+					return Undefined(), fmt.Errorf("macro %s: unexpected keyword argument %q", n.name, key)
+				}
 				extra.AsDict().Set(key, value)
 			}
 		}
@@ -967,6 +974,32 @@ func (e *evaluator) evalBinary(n *binExpr) (Value, error) {
 				}
 			} else {
 				args = []any{right.v}
+			}
+			// Python's decimal integer conversion truncates float arguments. Walk
+			// conversions so mixed integer/float formats and escaped %% retain
+			// their original argument positions and types.
+			format := left.AsString()
+			arg := 0
+			for i := 0; i < len(format); i++ {
+				if format[i] != '%' {
+					continue
+				}
+				i++
+				if i < len(format) && format[i] == '%' {
+					continue
+				}
+				for i < len(format) && strings.ContainsRune("#0- +0123456789.*hlL", rune(format[i])) {
+					if format[i] == '*' {
+						arg++
+					}
+					i++
+				}
+				if i < len(format) && format[i] == 'd' && arg < len(args) {
+					if value, ok := args[arg].(float64); ok {
+						args[arg] = int64(value)
+					}
+				}
+				arg++
 			}
 			return NewString(fmt.Sprintf(left.AsString(), args...)), nil
 		}

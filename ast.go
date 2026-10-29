@@ -252,3 +252,88 @@ type dictExpr struct {
 
 func (n *dictExpr) nodeType() string { return "dict" }
 func (n *dictExpr) exprNode()        {}
+
+// referencesName finds variable references, including those in inactive branches.
+// Literal text, attribute names, and nested macro bodies are not references in
+// the enclosing macro's scope.
+func referencesName(name string, nodes ...node) bool {
+	for _, n := range nodes {
+		var children []node
+		switch n := n.(type) {
+		case *nameExpr:
+			if n.name == name {
+				return true
+			}
+		case *outputNode:
+			children = append(children, n.expression)
+		case *ifNode:
+			for _, branch := range n.branches {
+				children = append(children, branch.condition)
+				children = append(children, branch.body...)
+			}
+		case *forNode:
+			children = append(children, n.iter, n.filterExpr)
+			children = append(children, n.body...)
+			children = append(children, n.elseBody...)
+		case *setNode:
+			children = append(children, n.value)
+		case *setBlockNode:
+			children = append(children, n.body...)
+		case *callNode:
+			children = append(children, n.expr)
+			children = append(children, n.body...)
+		case *filterBlockNode:
+			children = append(children, n.filter)
+			children = append(children, n.body...)
+		case *attrExpr:
+			children = append(children, n.obj)
+		case *itemExpr:
+			children = append(children, n.obj, n.key)
+		case *sliceExpr:
+			children = append(children, n.obj, n.start, n.stop, n.step)
+		case *unaryExpr:
+			children = append(children, n.operand)
+		case *binExpr:
+			children = append(children, n.left, n.right)
+		case *compareExpr:
+			for _, operand := range n.operands {
+				children = append(children, operand)
+			}
+		case *condExpr:
+			children = append(children, n.condition, n.trueExpr, n.falseExpr)
+		case *callExpr:
+			children = append(children, n.fn)
+			for _, arg := range n.args {
+				children = append(children, arg)
+			}
+			for _, kw := range n.kwargs {
+				children = append(children, kw.value)
+			}
+		case *filterExpr:
+			children = append(children, n.expr)
+			for _, arg := range n.args {
+				children = append(children, arg)
+			}
+			for _, kw := range n.kwargs {
+				children = append(children, kw.value)
+			}
+		case *testExpr:
+			children = append(children, n.expr)
+			for _, arg := range n.args {
+				children = append(children, arg)
+			}
+		case *listExpr:
+			for _, item := range n.items {
+				children = append(children, item)
+			}
+		case *dictExpr:
+			for _, pair := range n.pairs {
+				children = append(children, pair.key, pair.value)
+			}
+		}
+		if referencesName(name, children...) {
+			return true
+		}
+	}
+	return false
+}

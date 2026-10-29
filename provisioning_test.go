@@ -22,6 +22,10 @@ func TestNetworkProvisioning(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Source is the template to exercise. Data supplies its input variables:
+	// strings, numbers, booleans, nil, []any lists, and map[string]any mappings.
+	// Expected output comes from Python, not from Data. The complete plan
+	// declares its own inventory, so it intentionally needs an empty context.
 	cases := []struct {
 		Name    string         `json:"name"`
 		Source  string         `json:"source"`
@@ -70,6 +74,149 @@ func TestNetworkProvisioning(t *testing.T) {
 		{Name: "json options", Source: `{{ {'site':'東京📡','load':0.0}|tojson(ensure_ascii=true,sort_keys=true) }} {{ {'power':1.0}|tojson }}`},
 		{Name: "nested json options", Source: `{{ {'z':{'b':1.0,'a':['東京','📡']},'a':[]}|tojson(indent=2,sort_keys=true,ensure_ascii=true) }}`},
 		{Name: "indent options", Source: `{{ 'a\n\nb'|indent(2,first=true,blank=true) }}|{{ 'a\nb'|indent('# ',first=true) }}`},
+		{
+			Name:   "snssai macro uses defaults",
+			Source: `{% macro label(parts=['01','000001'], separator='-') %}{{ parts|join(separator) }}{% endmacro %}{{ label() }}`,
+		},
+		{
+			Name:   "snssai macro accepts named provisioning inputs",
+			Source: `{% macro label(parts=['01','000001'], separator='-') %}{{ parts|join(separator) }}{% endmacro %}{{ label(separator=separator, parts=parts) }}`,
+			Data:   map[string]any{"parts": []any{"02", "000042"}, "separator": ":"},
+		},
+		{
+			Name:   "nf macro collects only extra arguments",
+			Source: `{% macro group(name) %}{{ name }}:{{ varargs|join(',') }}:{{ kwargs|length }}:{{ kwargs.get('critical', false) }}{% endmacro %}{{ group(name, first, second, critical=critical) }}|{{ group(name=name) }}`,
+			Data:   map[string]any{"name": "control-plane", "first": "amf", "second": "smf", "critical": true},
+		},
+		{
+			Name:    "macro rejects duplicate parameter binding",
+			Source:  `{% macro label(parts) %}{{ parts|join('-') }}{% endmacro %}{{ label(parts, parts=parts) }}`,
+			Data:    map[string]any{"parts": []any{"02", "000042"}},
+			WantErr: true,
+		},
+		{
+			Name:    "macro rejects unexpected keyword",
+			Source:  `{% macro label(parts) %}{{ parts|join('-') }}{% endmacro %}{{ label(parts, unknown=true) }}`,
+			Data:    map[string]any{"parts": []any{"02", "000042"}},
+			WantErr: true,
+		},
+		{
+			Name:   "admission comparison evaluates middle operand once",
+			Source: `{% set trace=namespace(calls=0) %}{% macro measured(v) %}{% set trace.calls=trace.calls+1 %}{{ v }}{% endmacro %}{{ floor <= measured(utilization)|int < alarm }}:{{ trace.calls }}`,
+			Data:   map[string]any{"floor": 0, "utilization": 65, "alarm": 80},
+		},
+		{
+			Name:   "admission comparison stops after failed lower bound",
+			Source: `{{ floor <= utilization < raise_exception('upper bound must not run') }}`,
+			Data:   map[string]any{"floor": 0, "utilization": -1},
+		},
+		{
+			Name:   "topology preserves siblings and parent loop metadata",
+			Source: `{% for node in topology recursive %}[{{ loop.depth0 }}:{{ loop.index }}/{{ loop.length }}:{{ node.name }}{% if node.children %}{{ loop(node.children) }}{% endif %}:{{ loop.depth0 }}:{{ loop.index }}]{% endfor %}`,
+			Data: map[string]any{"topology": []any{
+				map[string]any{"name": "metro", "children": []any{
+					map[string]any{"name": "edge-a", "children": []any{}},
+					map[string]any{"name": "edge-b", "children": []any{
+						map[string]any{"name": "site-1", "children": []any{}},
+					}},
+				}},
+				map[string]any{"name": "suburban", "children": []any{}},
+			}},
+		},
+		{
+			Name:   "topology handles empty inventory",
+			Source: `{% for node in topology recursive %}{{ node.name }}{% if node.children %}{{ loop(node.children) }}{% endif %}{% else %}no sites{% endfor %}`,
+			Data:   map[string]any{"topology": []any{}},
+		},
+		{
+			Name:   "region and zone change detection",
+			Source: `{% for site in sites %}{{ loop.changed(site.region, site.zone) }};{% endfor %}`,
+			Data: map[string]any{"sites": []any{
+				map[string]any{"region": "metro", "zone": "a"},
+				map[string]any{"region": "metro", "zone": "a"},
+				map[string]any{"region": "metro", "zone": "b"},
+				map[string]any{"region": "suburban", "zone": "b"},
+				map[string]any{"region": "metro", "zone": "a"},
+			}},
+		},
+		{
+			Name:   "nested acceptance loops isolate assignments and share namespace",
+			Source: `{% set count=namespace(n=0) %}{% set label='outer' %}{% for site in sites %}{% set label=site %}{% for check in checks %}{% set label=check %}{% set count.n=count.n+1 %}{{ label }}-{{ count.n }};{% endfor %}{{ label }};{% endfor %}{{ label }}:{{ count.n }}`,
+			Data:   map[string]any{"sites": []any{"metro-1", "sub-2"}, "checks": []any{"registration", "dns", "time-sync"}},
+		},
+		{
+			Name:   "standby list copy preserves nested identity",
+			Source: `{% set copy=zones|list %}{{ copy is sameas(zones) }}:{{ copy.0 is sameas(zones.0) }}:{{ copy|length }}`,
+			Data:   map[string]any{"zones": []any{[]any{"edge-a", "edge-b"}, []any{"edge-c"}}},
+		},
+		{
+			Name:   "policy defaults distinguish missing null and empty",
+			Source: `{{ slices|map(attribute='policy.dnn', default='internet')|list }}`,
+			Data: map[string]any{"slices": []any{
+				map[string]any{"policy": map[string]any{}},
+				map[string]any{"policy": map[string]any{"dnn": nil}},
+				map[string]any{"policy": map[string]any{"dnn": ""}},
+				map[string]any{"policy": map[string]any{"dnn": "ims"}},
+			}},
+		},
+		{
+			Name:   "dnn fallback distinguishes undefined and false values",
+			Source: `{{ missing|default('internet') }};{% for value in values %}{{ value|default('internet') }}:{{ value|default('internet', true) }};{% endfor %}`,
+			Data:   map[string]any{"values": []any{nil, false, 0, "", []any{}, "ims"}},
+		},
+		{
+			Name:   "backhaul sum accepts positional and keyword options",
+			Source: `{{ links|sum('mbps', reserved) }}:{{ links|sum(attribute='mbps', start=reserved) }}`,
+			Data:   map[string]any{"links": []any{map[string]any{"mbps": 1200}, map[string]any{"mbps": 3400}}, "reserved": 75},
+		},
+		{
+			Name:   "empty backhaul sum preserves reservation",
+			Source: `{{ links|sum(attribute='mbps', start=reserved) }}`,
+			Data:   map[string]any{"links": []any{}, "reserved": 75},
+		},
+		{
+			Name:   "carrier batch exact multiple needs no padding",
+			Source: `{{ carriers|batch(2, 0)|map('list')|list }}`,
+			Data:   map[string]any{"carriers": []any{1, 3, 5, 7}},
+		},
+		{
+			Name:   "carrier batch empty inventory stays empty",
+			Source: `{{ carriers|batch(2, 0)|map('list')|list }}`,
+			Data:   map[string]any{"carriers": []any{}},
+		},
+		{
+			Name:   "dnn catalog preserves first occurrence order",
+			Source: `{{ dnns|unique|join(',') }}:{{ dnns|unique(case_sensitive=true)|join(',') }}`,
+			Data:   map[string]any{"dnns": []any{"Internet", "IMS", "internet", "ims", "iot", "IMS"}},
+		},
+		{
+			Name:   "cell formatting accepts multiple substitutions",
+			Source: `{{ '%s-cell-%02d' % (rat, index) }}:{{ '100%% ready' % () }}`,
+			Data:   map[string]any{"rat": "NR", "index": 12},
+		},
+		{
+			Name:   "cell integer formatting accepts fractional numeric input",
+			Source: `{{ 'cell-%02d' % index }}`,
+			Data:   map[string]any{"index": 7.9},
+		},
+		{
+			Name:   "vendor string bounds use unicode character positions",
+			Source: `{{ name.find('NR', start, stop) }}:{{ name.startswith(('LTE','NR'), start, stop) }}:{{ name.endswith('NR', start, stop) }}`,
+			Data:   map[string]any{"name": "東京NR-edge-NR", "start": 2, "stop": 4},
+		},
+		{
+			Name:   "cli split preserves remainder after first whitespace split",
+			Source: `{{ command.split(none, 1) }}`,
+			Data:   map[string]any{"command": "\tinterface   n3  "},
+		},
+		{
+			Name:   "numeric conversion options accept positional arguments",
+			Source: `{{ reference|int(9, 16) }}:{{ invalid|int(9) }}:{{ invalid|float(23.5) }}`,
+			Data:   map[string]any{"reference": "0x2a", "invalid": "auto"},
+		},
+		{Name: "macro accepts kwargs referenced in inactive branch", Source: `{% macro m() %}{% if false %}{{ kwargs }}{% endif %}ok{% endmacro %}{{ m(extra=true) }}`},
+		{Name: "macro keyword name in string does not enable kwargs", Source: `{% macro m() %}{{ 'kwargs' }}{% endmacro %}{{ m(extra=true) }}`, WantErr: true},
+		{Name: "mixed integer and float percent formatting", Source: `{{ '%02d/%.2f/%+04d/%%' % (7.9, 2.75, -3.8) }}`},
 	}
 	for i := range cases {
 		if cases[i].Data == nil {
