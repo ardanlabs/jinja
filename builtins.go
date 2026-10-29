@@ -1563,7 +1563,7 @@ func iterableItems(v Value) []Value {
 }
 
 func builtinAttribute(v Value, path string, fallback Value) Value {
-	for _, part := range strings.Split(path, ".") {
+	for part := range strings.SplitSeq(path, ".") {
 		if v.IsDict() {
 			v, _ = v.AsDict().Get(part)
 		} else if index, err := strconv.Atoi(part); err == nil && index >= 0 {

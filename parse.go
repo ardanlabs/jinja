@@ -774,11 +774,12 @@ func (p *exprParser) parseAtom() (expr, error) {
 	// String literal.
 	if t.kind == tokString {
 		p.advance()
-		value := t.val
+		var value strings.Builder
+		value.WriteString(t.val)
 		for p.peek().kind == tokString {
-			value += p.advance().val
+			value.WriteString(p.advance().val)
 		}
-		return &litExpr{val: NewString(value)}, nil
+		return &litExpr{val: NewString(value.String())}, nil
 	}
 
 	// Identifier.
