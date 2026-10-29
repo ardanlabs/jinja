@@ -68,6 +68,44 @@ func tokenizeExpr(s string) []tok {
 						b.WriteByte('\n')
 					case 't':
 						b.WriteByte('\t')
+					case 'r':
+						b.WriteByte('\r')
+					case 'a':
+						b.WriteByte('\a')
+					case 'b':
+						b.WriteByte('\b')
+					case 'f':
+						b.WriteByte('\f')
+					case 'v':
+						b.WriteByte('\v')
+					case 'x', 'u', 'U', '0', '1', '2', '3', '4', '5', '6', '7':
+						width, base := 0, 16
+						switch s[i] {
+						case 'x':
+							width = 2
+						case 'u':
+							width = 4
+						case 'U':
+							width = 8
+						default:
+							base = 8
+						}
+						start := i + 1
+						if base == 8 {
+							start = i
+							for width < 3 && start+width < len(s) && s[start+width] >= '0' && s[start+width] <= '7' {
+								width++
+							}
+						}
+						if start+width <= len(s) {
+							if r, err := strconv.ParseInt(s[start:start+width], base, 32); err == nil {
+								b.WriteRune(rune(r))
+								i = start + width - 1
+								break
+							}
+						}
+						b.WriteByte('\\')
+						b.WriteByte(s[i])
 					case '\\':
 						b.WriteByte('\\')
 					case '\'':
@@ -96,21 +134,26 @@ func tokenizeExpr(s string) []tok {
 			for i < len(s) && s[i] >= '0' && s[i] <= '9' {
 				i++
 			}
-			if i < len(s) && s[i] == '.' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
+			isFloat := false
+			if i < len(s) && s[i] == '.' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' && (len(tokens) == 0 || tokens[len(tokens)-1].kind != tokDot) {
+				isFloat = true
 				i++
 				for i < len(s) && s[i] >= '0' && s[i] <= '9' {
 					i++
 				}
-				// Handle scientific notation.
-				if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+			}
+			// Exponents do not require a decimal point.
+			if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+				isFloat = true
+				i++
+				if i < len(s) && (s[i] == '+' || s[i] == '-') {
 					i++
-					if i < len(s) && (s[i] == '+' || s[i] == '-') {
-						i++
-					}
-					for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-						i++
-					}
 				}
+				for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+					i++
+				}
+			}
+			if isFloat {
 				tokens = append(tokens, tok{kind: tokFloat, val: s[start:i]})
 			} else {
 				tokens = append(tokens, tok{kind: tokInt, val: s[start:i]})
@@ -339,6 +382,7 @@ func (p *exprParser) parseComparison() (expr, error) {
 		return nil, err
 	}
 
+	chain := &compareExpr{operands: []expr{left}}
 	for {
 		t := p.peek()
 
@@ -351,7 +395,8 @@ func (p *exprParser) parseComparison() (expr, error) {
 				if err != nil {
 					return nil, err
 				}
-				left = &binExpr{op: t.val, left: left, right: right}
+				chain.ops = append(chain.ops, t.val)
+				chain.operands = append(chain.operands, right)
 				continue
 			}
 		}
@@ -363,7 +408,8 @@ func (p *exprParser) parseComparison() (expr, error) {
 			if err != nil {
 				return nil, err
 			}
-			left = &binExpr{op: "in", left: left, right: right}
+			chain.ops = append(chain.ops, "in")
+			chain.operands = append(chain.operands, right)
 			continue
 		}
 
@@ -375,54 +421,20 @@ func (p *exprParser) parseComparison() (expr, error) {
 			if err != nil {
 				return nil, err
 			}
-			left = &binExpr{op: "not in", left: left, right: right}
-			continue
-		}
-
-		// "is" / "is not" test.
-		if t.kind == tokName && t.val == "is" {
-			p.advance()
-			negated := false
-			if p.peek().kind == tokName && p.peek().val == "not" {
-				p.advance()
-				negated = true
-			}
-
-			// Parse test name.
-			testTok := p.advance()
-			testName := testTok.val
-
-			// Parse optional arguments.
-			var testArgs []expr
-			if p.peek().kind == tokLParen {
-				p.advance()
-				for p.peek().kind != tokRParen && p.peek().kind != tokEOF {
-					arg, err := p.parseExpression()
-					if err != nil {
-						return nil, err
-					}
-					testArgs = append(testArgs, arg)
-					if p.peek().kind == tokComma {
-						p.advance()
-					}
-				}
-				if _, err := p.expect(tokRParen, ")"); err != nil {
-					return nil, err
-				}
-			}
-
-			left = &testExpr{
-				expr:    left,
-				name:    testName,
-				negated: negated,
-				args:    testArgs,
-			}
+			chain.ops = append(chain.ops, "not in")
+			chain.operands = append(chain.operands, right)
 			continue
 		}
 
 		break
 	}
 
+	if len(chain.ops) == 1 {
+		return &binExpr{op: chain.ops[0], left: chain.operands[0], right: chain.operands[1]}, nil
+	}
+	if len(chain.ops) > 1 {
+		return chain, nil
+	}
 	return left, nil
 }
 
@@ -500,13 +512,13 @@ func (p *exprParser) parsePower() (expr, error) {
 		return nil, err
 	}
 
-	if p.peek().kind == tokPower {
+	for p.peek().kind == tokPower {
 		p.advance()
 		exp, err := p.parseUnary()
 		if err != nil {
 			return nil, err
 		}
-		return &binExpr{op: "**", left: base, right: exp}, nil
+		base = &binExpr{op: "**", left: base, right: exp}
 	}
 
 	return base, nil
@@ -521,11 +533,27 @@ func (p *exprParser) parseUnary() (expr, error) {
 			p.advance()
 			return p.parsePostfix(&litExpr{val: NewInt(math.MinInt64)})
 		}
-		operand, err := p.parseUnary()
+		operand, err := p.parseUnaryOperand()
 		if err != nil {
 			return nil, err
 		}
-		return &unaryExpr{op: op, operand: operand}, nil
+		// Fold signed numeric literals so slice bounds do not allocate per render.
+		if literal, ok := operand.(*litExpr); ok {
+			value := literal.val
+			if value.IsInt() {
+				if op == "-" {
+					value = NewInt(-value.AsInt())
+				}
+				return p.parsePostfix(&litExpr{val: value})
+			}
+			if value.IsFloat() {
+				if op == "-" {
+					value = NewFloat(-value.AsFloat())
+				}
+				return p.parsePostfix(&litExpr{val: value})
+			}
+		}
+		return p.parsePostfix(&unaryExpr{op: op, operand: operand})
 	}
 
 	e, err := p.parseAtom()
@@ -535,7 +563,25 @@ func (p *exprParser) parseUnary() (expr, error) {
 	return p.parsePostfix(e)
 }
 
+// Unary signs bind before filters, unlike the rest of the postfix operations.
+func (p *exprParser) parseUnaryOperand() (expr, error) {
+	if p.peek().kind == tokOp && (p.peek().val == "-" || p.peek().val == "+") {
+		op := p.advance().val
+		operand, err := p.parseUnaryOperand()
+		return &unaryExpr{op: op, operand: operand}, err
+	}
+	e, err := p.parseAtom()
+	if err != nil {
+		return nil, err
+	}
+	return p.parsePostfixMode(e, false)
+}
+
 func (p *exprParser) parsePostfix(e expr) (expr, error) {
+	return p.parsePostfixMode(e, true)
+}
+
+func (p *exprParser) parsePostfixMode(e expr, filters bool) (expr, error) {
 	var err error
 	for {
 		t := p.peek()
@@ -630,7 +676,7 @@ func (p *exprParser) parsePostfix(e expr) (expr, error) {
 		}
 
 		// Filter: e | filtername or e | filtername(args)
-		if t.kind == tokPipe {
+		if filters && t.kind == tokPipe {
 			p.advance()
 			filterTok := p.advance()
 			if filterTok.kind != tokName {
@@ -653,6 +699,28 @@ func (p *exprParser) parsePostfix(e expr) (expr, error) {
 				args:   filterArgs,
 				kwargs: filterKwargs,
 			}
+			continue
+		}
+
+		if filters && p.matchName("is") {
+			negated := p.matchName("not")
+			name, err := p.expect(tokName, "")
+			if err != nil {
+				return nil, err
+			}
+			var args []expr
+			if p.peek().kind == tokLParen {
+				p.advance()
+				args, _, err = p.parseCallArgs()
+			} else if p.peek().kind == tokInt || p.peek().kind == tokString || (p.peek().kind == tokName && p.peek().val != "and" && p.peek().val != "or" && p.peek().val != "else" && p.peek().val != "if" && p.peek().val != "in") {
+				var arg expr
+				arg, err = p.parseUnaryOperand()
+				args = []expr{arg}
+			}
+			if err != nil {
+				return nil, err
+			}
+			e = &testExpr{expr: e, name: name.val, negated: negated, args: args}
 			continue
 		}
 
@@ -706,7 +774,12 @@ func (p *exprParser) parseAtom() (expr, error) {
 	// String literal.
 	if t.kind == tokString {
 		p.advance()
-		return &litExpr{val: NewString(t.val)}, nil
+		var value strings.Builder
+		value.WriteString(t.val)
+		for p.peek().kind == tokString {
+			value.WriteString(p.advance().val)
+		}
+		return &litExpr{val: NewString(value.String())}, nil
 	}
 
 	// Identifier.
@@ -720,7 +793,7 @@ func (p *exprParser) parseAtom() (expr, error) {
 		p.advance()
 		if p.peek().kind == tokRParen {
 			p.advance()
-			return &listExpr{items: nil}, nil
+			return &listExpr{items: nil, tuple: true}, nil
 		}
 		e, err := p.parseExpression()
 		if err != nil {
@@ -744,7 +817,7 @@ func (p *exprParser) parseAtom() (expr, error) {
 			if _, err := p.expect(tokRParen, ")"); err != nil {
 				return nil, err
 			}
-			return &listExpr{items: items}, nil
+			return &listExpr{items: items, tuple: true}, nil
 		}
 
 		if _, err := p.expect(tokRParen, ")"); err != nil {
@@ -918,7 +991,7 @@ func applyTrimming(segs []segment) {
 					break
 				}
 			}
-		case applyDefaults:
+		case applyDefaults && !seg.keepLeft:
 			for j := i - 1; j >= 0; j-- {
 				if segs[j].kind == segText {
 					// Treat the very first text segment in the
@@ -928,7 +1001,7 @@ func applyTrimming(segs []segment) {
 					// strips the indentation, matching Jinja2.
 					isFirstText := true
 					for k := j - 1; k >= 0; k-- {
-						if segs[k].kind == segText {
+						if segs[k].kind == segText || segs[k].kind == segExpr {
 							isFirstText = false
 							break
 						}
@@ -953,7 +1026,7 @@ func applyTrimming(segs []segment) {
 					break
 				}
 			}
-		case applyDefaults:
+		case applyDefaults && !seg.keepRight:
 			for j := i + 1; j < len(segs); j++ {
 				if segs[j].kind == segText {
 					segs[j].text = trimBlockNewline(segs[j].text)
@@ -1126,15 +1199,16 @@ func (p *templateParser) parseUntil(stopKeywords ...string) ([]node, error) {
 				p.advance()
 				nodes = append(nodes, &continueNode{})
 
-			case "generation":
-				// generation/endgeneration are tokenizer hints; treat as no-op.
+			case "generation", "block":
+				// Standalone blocks render their body; generation is a tokenizer hint.
 				p.advance()
-				body, err := p.parseUntil("endgeneration")
+				end := "end" + keyword
+				body, err := p.parseUntil(end)
 				if err != nil {
 					return nil, err
 				}
-				if p.done() || stmtKeyword(p.peek().text) != "endgeneration" {
-					return nil, fmt.Errorf("line %d: unclosed generation block", seg.line)
+				if p.done() || stmtKeyword(p.peek().text) != end {
+					return nil, fmt.Errorf("line %d: unclosed %s block", seg.line, keyword)
 				}
 				p.advance()
 				nodes = append(nodes, body...)
@@ -1317,7 +1391,7 @@ func (p *templateParser) parseSet() (node, error) {
 	target := strings.TrimSpace(before)
 	valueStr := strings.TrimSpace(after)
 
-	val, err := parseExpr(valueStr)
+	val, err := parseExpr("(" + valueStr + ")")
 	if err != nil {
 		return nil, fmt.Errorf("line %d: set value: %w", seg.line, err)
 	}
@@ -1350,19 +1424,24 @@ func (p *templateParser) parseMacro() (*macroNode, error) {
 	paramStr = strings.TrimSuffix(paramStr, ")")
 
 	var params []macroParam
-	if strings.TrimSpace(paramStr) != "" {
-		for part := range strings.SplitSeq(paramStr, ",") {
-			part = strings.TrimSpace(part)
-			if before, after, ok := strings.Cut(part, "="); ok {
-				pName := strings.TrimSpace(before)
-				defStr := strings.TrimSpace(after)
-				defVal, err := parseExpr(defStr)
-				if err != nil {
-					return nil, fmt.Errorf("line %d: macro default: %w", seg.line, err)
-				}
-				params = append(params, macroParam{name: pName, defaultVal: defVal})
-			} else {
-				params = append(params, macroParam{name: part})
+	ep := newExprParser(tokenizeExpr(paramStr))
+	for ep.peek().kind != tokEOF {
+		token, err := ep.expect(tokName, "")
+		if err != nil {
+			return nil, fmt.Errorf("line %d: macro parameter: %w", seg.line, err)
+		}
+		param := macroParam{name: token.val}
+		if ep.peek().val == "=" {
+			ep.advance()
+			param.defaultVal, err = ep.parseExpression()
+			if err != nil {
+				return nil, fmt.Errorf("line %d: macro default: %w", seg.line, err)
+			}
+		}
+		params = append(params, param)
+		if ep.peek().kind != tokEOF {
+			if _, err := ep.expect(tokComma, ","); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -1428,7 +1507,7 @@ func (p *templateParser) parseFilterBlock() (*filterBlockNode, error) {
 	filterStr := strings.TrimPrefix(strings.TrimSpace(seg.text), "filter")
 	filterStr = strings.TrimSpace(filterStr)
 
-	fe, err := parseExpr(filterStr)
+	fe, err := parseExpr("__filter_body | " + filterStr)
 	if err != nil {
 		return nil, fmt.Errorf("line %d: filter expression: %w", seg.line, err)
 	}

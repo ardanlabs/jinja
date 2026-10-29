@@ -99,6 +99,14 @@ See the [examples](examples/) directory for more, including tool calling.
 - String concatenation with `~`
 - Inline if expressions: `{{ x if condition else y }}`
 - Slice notation: `{{ items[::-1] }}`
+- Raw blocks: `{% raw %}{{ literal text }}{% endraw %}`
+- Filter blocks: `{% filter replace('-', '_')|upper %}body{% endfilter %}`
+- Tuple literals and unpacking assignments: `{% set a, b = '001', '01' %}`
+- Filtered and recursive loops, including `loop.changed()` and `loop.depth0`
+- Whitespace overrides: `{%+ ... %}` and `{% ... +%}`
+
+Output follows Python's representations: `none` renders as `None`, booleans
+as `True`/`False`, and integral floats retain `.0`.
 
 String and list repetition with `*` supports either operand order. Negative
 counts produce empty sequences. Each repetition is limited to 64 MiB of string
@@ -111,7 +119,7 @@ limit does not include nested values or the final rendered output.
 
 ### Tests
 
-`defined` · `undefined` · `none` · `boolean` · `integer` · `float` · `number` · `string` · `mapping` · `iterable` · `sequence` · `callable` · `true` · `false` · `odd` · `even` · `upper` · `lower` · `sameas` · `eq` · `ne` · `gt` · `ge` · `lt` · `le` · `in`
+`defined` · `undefined` · `none` · `boolean` · `integer` · `float` · `number` · `string` · `mapping` · `iterable` · `sequence` · `callable` · `true` · `false` · `odd` · `even` · `divisibleby` · `upper` · `lower` · `sameas` · `eq` · `ne` · `gt` · `ge` · `lt` · `le` · `in`
 
 ### Global Functions
 
@@ -119,7 +127,7 @@ limit does not include nested values or the final rendered output.
 
 ### String Methods
 
-`.strip()` · `.split()` · `.startswith()` · `.endswith()` · `.upper()` · `.lower()` · `.replace()` · `.find()` · `.count()` · `.lstrip()` · `.rstrip()`
+`.strip()` · `.split()` · `.startswith()` · `.endswith()` · `.upper()` · `.lower()` · `.title()` · `.capitalize()` · `.replace()` · `.find()` · `.count()` · `.lstrip()` · `.rstrip()`
 
 ### Dict Methods
 
@@ -155,6 +163,25 @@ matched by call ID, reasoning-effort options, and built-in versus custom `bash`
 tool definitions. The unmodified upstream template is included in the
 byte-for-byte comparisons against Python Jinja2. These tests validate template
 rendering, not model inference.
+
+## Provisioning Compatibility Tests
+
+The self-contained 5G network provisioning template lives separately in
+`testdata/provisioning/5g-netprov.jinja`. `TestNetworkProvisioning` renders it
+with an empty context, without loading chat requests or model-specific inputs.
+It also checks focused language cases and provisioning-specific boundary data.
+
+The test uses `scripts/render_provisioning.py` and the same Python Jinja2
+environment as the chat comparisons, including its custom `tojson` filter.
+Successful outputs must match byte-for-byte; expected error cases must fail
+in both engines. Each compiled Go template is rendered twice to check isolation.
+Python reference output is generated on demand rather than checked in.
+
+Run it with `uv` installed:
+
+```sh
+go test . -run '^TestNetworkProvisioning$' -count=1 -v
+```
 
 ## License
 

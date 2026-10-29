@@ -4,13 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 	"unsafe"
 )
 
 var (
-	errBreak    = errors.New("break")
-	errContinue = errors.New("continue")
+	errBreak      = errors.New("break")
+	errContinue   = errors.New("continue")
+	errSliceIndex = errors.New("slice indices must be integers or none")
 )
 
 // =============================================================================
@@ -127,6 +131,10 @@ func (e *evaluator) execFor(n *forNode) error {
 	if err != nil {
 		return err
 	}
+	return e.execForItems(n, iterVal, 0)
+}
+
+func (e *evaluator) execForItems(n *forNode, iterVal Value, depth int64) error {
 
 	var items []Value
 	switch {
@@ -150,7 +158,7 @@ func (e *evaluator) execFor(n *forNode) error {
 		var filtered []Value
 		for _, item := range items {
 			child := newScope(e.scope)
-			child.set(n.valVar, item)
+			bindLoopItem(child, n, item)
 			old := e.scope
 			e.scope = child
 			fv, err := e.evalExpr(n.filterExpr)
@@ -174,16 +182,36 @@ func (e *evaluator) execFor(n *forNode) error {
 
 	total := int64(len(items))
 
-	// Pre-allocate the loop dict and child scope once, then reuse them
-	// across iterations to avoid per-iteration allocations.
+	// Loop metadata persists, but each iteration gets its own assignment scope.
 	loop := NewDict()
 	ld := loop.AsDict()
 	ld.Set("length", NewInt(total))
-
-	child := newScope(e.scope)
-	child.set("loop", loop)
+	ld.Set("depth", NewInt(depth+1))
+	ld.Set("depth0", NewInt(depth))
+	var previous Value
+	ld.Set("changed", NewCallable("loop.changed", func(args []Value, kwargs map[string]Value) (Value, error) {
+		current := NewList(args)
+		changed := !current.Equals(previous)
+		previous = current
+		return NewBool(changed), nil
+	}))
+	if n.recursive {
+		parent := e.scope
+		ld.Set("__call__", NewCallable("loop", func(args []Value, kwargs map[string]Value) (Value, error) {
+			if len(args) != 1 {
+				return Undefined(), fmt.Errorf("recursive loop requires one iterable")
+			}
+			nested := evaluator{scope: parent, builtins: e.builtins}
+			if err := nested.execForItems(n, args[0], depth+1); err != nil {
+				return Undefined(), err
+			}
+			return NewString(nested.output.String()), nil
+		}))
+	}
 
 	for i, item := range items {
+		child := newScope(e.scope)
+		child.set("loop", loop)
 		// Set loop variable(s).
 		if n.keyVar != "" {
 			// Destructuring: for key, val in items
@@ -247,6 +275,15 @@ func (e *evaluator) execFor(n *forNode) error {
 	return nil
 }
 
+func bindLoopItem(child *scope, n *forNode, item Value) {
+	if n.keyVar != "" && item.IsList() && item.AsList().Len() == 2 {
+		child.set(n.keyVar, item.AsList().Get(0))
+		child.set(n.valVar, item.AsList().Get(1))
+		return
+	}
+	child.set(n.valVar, item)
+}
+
 func (e *evaluator) execSet(n *setNode) error {
 	val, err := e.evalExpr(n.value)
 	if err != nil {
@@ -262,7 +299,16 @@ func (e *evaluator) execSet(n *setNode) error {
 		return nil
 	}
 
-	e.scope.set(n.target, val)
+	if targets := strings.Split(n.target, ","); len(targets) > 1 {
+		if !val.IsList() || val.AsList().Len() != len(targets) {
+			return fmt.Errorf("set: unpacking requires %d values", len(targets))
+		}
+		for i, target := range targets {
+			e.scope.set(strings.TrimSpace(target), val.AsList().Get(i))
+		}
+	} else {
+		e.scope.set(n.target, val)
+	}
 	return nil
 }
 
@@ -283,6 +329,7 @@ func (e *evaluator) execMacro(n *macroNode) error {
 	params := n.params
 	body := n.body
 	parentScope := e.scope
+	acceptsKwargs := referencesName("kwargs", body...)
 
 	fn := NewCallable(n.name, func(args []Value, kwargs map[string]Value) (Value, error) {
 		child := newScope(parentScope)
@@ -290,6 +337,9 @@ func (e *evaluator) execMacro(n *macroNode) error {
 		// Bind positional args.
 		for i, param := range params {
 			if i < len(args) {
+				if _, duplicate := kwargs[param.name]; duplicate {
+					return Undefined(), fmt.Errorf("macro %s: multiple values for argument %q", n.name, param.name)
+				}
 				child.set(param.name, args[i])
 			} else if v, ok := kwargs[param.name]; ok {
 				child.set(param.name, v)
@@ -304,6 +354,19 @@ func (e *evaluator) execMacro(n *macroNode) error {
 				child.set(param.name, Undefined())
 			}
 		}
+		extra := NewDict()
+		for key, value := range kwargs {
+			if _, bound := child.vars[key]; !bound {
+				if !acceptsKwargs && key != "caller" {
+					return Undefined(), fmt.Errorf("macro %s: unexpected keyword argument %q", n.name, key)
+				}
+				extra.AsDict().Set(key, value)
+			}
+		}
+		varargs := NewList(args[min(len(args), len(params)):])
+		varargs.AsList().tuple = true
+		child.set("varargs", varargs)
+		child.set("kwargs", extra)
 
 		// Set caller if available.
 		if caller, ok := kwargs["caller"]; ok {
@@ -370,7 +433,7 @@ func (e *evaluator) execCall(n *callNode) error {
 			args = append(args, av)
 		}
 
-		kwargs, err := e.evalKeywordArgs(callEx.kwargs)
+		kwargs, _, err := e.evalKeywordArgs(callEx.kwargs)
 		if err != nil {
 			return err
 		}
@@ -409,30 +472,19 @@ func (e *evaluator) execCall(n *callNode) error {
 func (e *evaluator) execFilterBlock(n *filterBlockNode) error {
 	// Render body to string.
 	bodyEval := evaluator{
-		scope:    e.scope,
+		scope:    newScope(e.scope),
 		builtins: e.builtins,
 	}
 	if err := bodyEval.execNodes(n.body); err != nil {
 		return err
 	}
 	bodyStr := bodyEval.output.String()
-
-	// Apply the filter. The filter expression should be a name or filter chain.
-	if fe, ok := n.filter.(*nameExpr); ok {
-		filterVal, ok := lookupFilter(e.builtins, fe.name)
-		if !ok {
-			return fmt.Errorf("unknown filter %q", fe.name)
-		}
-		result, err := filterVal.AsCallable().Fn([]Value{NewString(bodyStr)}, nil)
-		if err != nil {
-			return err
-		}
-		e.output.WriteString(printValue(result))
-		return nil
+	bodyEval.scope.set("__filter_body", NewString(bodyStr))
+	result, err := bodyEval.evalExpr(n.filter)
+	if err != nil {
+		return err
 	}
-
-	// For more complex filter expressions, just output the body.
-	e.output.WriteString(bodyStr)
+	e.output.WriteString(printValue(result))
 	return nil
 }
 
@@ -464,6 +516,24 @@ func (e *evaluator) evalExpr(ex expr) (Value, error) {
 	case *binExpr:
 		return e.evalBinary(n)
 
+	case *compareExpr:
+		left, err := e.evalExpr(n.operands[0])
+		if err != nil {
+			return Undefined(), err
+		}
+		for i, op := range n.ops {
+			right, err := e.evalExpr(n.operands[i+1])
+			if err != nil {
+				return Undefined(), err
+			}
+			result, err := e.evalBinary(&binExpr{op: op, left: &litExpr{val: left}, right: &litExpr{val: right}})
+			if err != nil || !result.IsTruthy() {
+				return result, err
+			}
+			left = right
+		}
+		return NewBool(true), nil
+
 	case *condExpr:
 		return e.evalCond(n)
 
@@ -485,7 +555,9 @@ func (e *evaluator) evalExpr(ex expr) (Value, error) {
 			}
 			items[i] = v
 		}
-		return NewList(items), nil
+		value := NewList(items)
+		value.AsList().tuple = n.tuple
+		return value, nil
 
 	case *dictExpr:
 		d := NewDict()
@@ -516,6 +588,10 @@ func (e *evaluator) evalAttr(n *attrExpr) (Value, error) {
 
 	// Dict attribute access.
 	if obj.IsDict() {
+		method, err := e.dictMethod(obj, n.attr)
+		if err != nil || !method.IsUndefined() {
+			return method, err
+		}
 		if v, ok := obj.AsDict().Get(n.attr); ok {
 			return v, nil
 		}
@@ -531,6 +607,9 @@ func (e *evaluator) evalAttr(n *attrExpr) (Value, error) {
 
 	// List methods.
 	if obj.IsList() {
+		if idx, err := strconv.Atoi(n.attr); err == nil && idx >= 0 && idx < obj.AsList().Len() {
+			return obj.AsList().Get(idx), nil
+		}
 		return e.listMethod(obj, n.attr)
 	}
 
@@ -549,6 +628,9 @@ func (e *evaluator) evalItem(n *itemExpr) (Value, error) {
 	}
 
 	if obj.IsList() {
+		if !key.IsInt() && !key.IsBool() {
+			return Undefined(), nil
+		}
 		idx := int(toInt64(key))
 		list := obj.AsList()
 		if idx < 0 {
@@ -569,6 +651,9 @@ func (e *evaluator) evalItem(n *itemExpr) (Value, error) {
 	}
 
 	if obj.IsString() {
+		if !key.IsInt() && !key.IsBool() {
+			return Undefined(), nil
+		}
 		idx := int(toInt64(key))
 		s := obj.AsString()
 		runes := []rune(s)
@@ -589,11 +674,27 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 	if err != nil {
 		return Undefined(), err
 	}
+	length := 0
+	switch {
+	case obj.IsList():
+		length = obj.AsList().Len()
+	case obj.IsString():
+		length = utf8.RuneCountInString(obj.AsString())
+	default:
+		return Undefined(), nil
+	}
+	start, stop, step, err := resolveSlice(n, e, length)
+	if errors.Is(err, errSliceIndex) && constantExpr(n.obj) && constantExpr(n.start) && constantExpr(n.stop) && constantExpr(n.step) {
+		// Jinja constant-folds through getitem, which converts TypeError to
+		// undefined. Runtime slices instead propagate invalid index errors.
+		return Undefined(), nil
+	}
+	if err != nil {
+		return Undefined(), err
+	}
 
 	if obj.IsList() {
 		list := obj.AsList()
-		length := list.Len()
-		start, stop, step := resolveSlice(n, e, length)
 
 		// Fast path for the overwhelmingly common step==1 case
 		// (e.g. messages[1:] in chat templates). A single allocation
@@ -608,11 +709,15 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 				stop = length
 			}
 			if start >= stop {
-				return NewList(nil), nil
+				result := NewList(nil)
+				result.AsList().tuple = list.tuple
+				return result, nil
 			}
 			items := make([]Value, stop-start)
 			copy(items, list.Items[start:stop])
-			return NewList(items), nil
+			result := NewList(items)
+			result.AsList().tuple = list.tuple
+			return result, nil
 		}
 
 		var items []Value
@@ -639,7 +744,9 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 				}
 			}
 		}
-		return NewList(items), nil
+		result := NewList(items)
+		result.AsList().tuple = list.tuple
+		return result, nil
 	}
 
 	if obj.IsString() {
@@ -651,8 +758,6 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 		// This is the dominant cost in the kronk dense profile because
 		// the system prompt can be tens of thousands of bytes.
 		if isASCII(s) {
-			length := len(s)
-			start, stop, step := resolveSlice(n, e, length)
 
 			if step == 1 {
 				if start < 0 {
@@ -687,8 +792,6 @@ func (e *evaluator) evalSlice(n *sliceExpr) (Value, error) {
 		}
 
 		runes := []rune(s)
-		length := len(runes)
-		start, stop, step := resolveSlice(n, e, length)
 		var result []rune
 		if step > 0 {
 			for i := start; i < stop; i += step {
@@ -721,43 +824,70 @@ func isASCII(s string) bool {
 	return true
 }
 
-func resolveSlice(n *sliceExpr, e *evaluator, length int) (int, int, int) {
+func resolveSlice(n *sliceExpr, e *evaluator, length int) (int, int, int, error) {
+	var indices [3]int
+	var provided [3]bool
+	valid := true
+	for i, ex := range [3]expr{n.start, n.stop, n.step} {
+		if ex != nil {
+			v, err := e.evalExpr(ex)
+			if err != nil {
+				return 0, 0, 0, err
+			}
+			if !v.IsNone() && !v.IsInt() && !v.IsBool() {
+				valid = false
+			}
+			if !v.IsNone() {
+				provided[i] = true
+				indices[i] = int(toInt64(v))
+			}
+		}
+	}
+	if !valid {
+		return 0, 0, 0, errSliceIndex
+	}
 	step := 1
-	if n.step != nil {
-		v, _ := e.evalExpr(n.step)
-		step = int(toInt64(v))
-		if step == 0 {
-			step = 1
+	if provided[2] {
+		step = indices[2]
+	}
+	if step == 0 {
+		return 0, 0, 0, fmt.Errorf("slice step must not be zero")
+	}
+	low, high := 0, length
+	start, stop := 0, length
+	if step < 0 {
+		low, high = -1, length-1
+		start, stop = high, low
+	}
+	for i, target := range []*int{&start, &stop} {
+		if provided[i] {
+			index := indices[i]
+			if index < 0 {
+				index += length
+			}
+			*target = min(max(index, low), high)
 		}
 	}
+	return start, stop, step, nil
+}
 
-	var start, stop int
-
-	if step > 0 {
-		start = 0
-		stop = length
-	} else {
-		start = length - 1
-		stop = -length - 1
-	}
-
-	if n.start != nil {
-		v, _ := e.evalExpr(n.start)
-		start = int(toInt64(v))
-		if start < 0 {
-			start += length
+func constantExpr(ex expr) bool {
+	switch n := ex.(type) {
+	case nil, *litExpr:
+		return true
+	case *unaryExpr:
+		return constantExpr(n.operand)
+	case *binExpr:
+		return constantExpr(n.left) && constantExpr(n.right)
+	case *listExpr:
+		for _, item := range n.items {
+			if !constantExpr(item) {
+				return false
+			}
 		}
+		return true
 	}
-
-	if n.stop != nil {
-		v, _ := e.evalExpr(n.stop)
-		stop = int(toInt64(v))
-		if stop < 0 {
-			stop += length
-		}
-	}
-
-	return start, stop, step
+	return false
 }
 
 func (e *evaluator) evalUnary(n *unaryExpr) (Value, error) {
@@ -770,6 +900,9 @@ func (e *evaluator) evalUnary(n *unaryExpr) (Value, error) {
 	case "not":
 		return NewBool(!operand.IsTruthy()), nil
 	case "-":
+		if operand.IsBool() {
+			return NewInt(-toInt64(operand)), nil
+		}
 		if operand.IsInt() {
 			return NewInt(-operand.AsInt()), nil
 		}
@@ -778,6 +911,9 @@ func (e *evaluator) evalUnary(n *unaryExpr) (Value, error) {
 		}
 		return NewInt(0), nil
 	case "+":
+		if operand.IsBool() {
+			return NewInt(toInt64(operand)), nil
+		}
 		return operand, nil
 	}
 
@@ -830,6 +966,43 @@ func (e *evaluator) evalBinary(n *binExpr) (Value, error) {
 	case "//":
 		return floorDivValues(left, right), nil
 	case "%":
+		if left.IsString() {
+			var args []any
+			if right.IsList() && right.AsList().tuple {
+				for _, item := range right.AsList().Items {
+					args = append(args, item.v)
+				}
+			} else {
+				args = []any{right.v}
+			}
+			// Python's decimal integer conversion truncates float arguments. Walk
+			// conversions so mixed integer/float formats and escaped %% retain
+			// their original argument positions and types.
+			format := left.AsString()
+			arg := 0
+			for i := 0; i < len(format); i++ {
+				if format[i] != '%' {
+					continue
+				}
+				i++
+				if i < len(format) && format[i] == '%' {
+					continue
+				}
+				for i < len(format) && strings.ContainsRune("#0- +0123456789.*hlL", rune(format[i])) {
+					if format[i] == '*' {
+						arg++
+					}
+					i++
+				}
+				if i < len(format) && format[i] == 'd' && arg < len(args) {
+					if value, ok := args[arg].(float64); ok {
+						args[arg] = int64(value)
+					}
+				}
+				arg++
+			}
+			return NewString(fmt.Sprintf(left.AsString(), args...)), nil
+		}
 		return modValues(left, right), nil
 	case "**":
 		return powValues(left, right), nil
@@ -883,6 +1056,11 @@ func (e *evaluator) evalCallExpr(n *callExpr) (Value, error) {
 		return Undefined(), err
 	}
 
+	if fn.IsDict() {
+		if call, ok := fn.AsDict().Get("__call__"); ok {
+			fn = call
+		}
+	}
 	if !fn.IsCallable() {
 		return Undefined(), fmt.Errorf("%s is not callable: %s", callableName(n.fn), fn.String())
 	}
@@ -896,42 +1074,55 @@ func (e *evaluator) evalCallExpr(n *callExpr) (Value, error) {
 		args[i] = v
 	}
 
-	kwargs, err := e.evalKeywordArgs(n.kwargs)
+	kwargs, keys, err := e.evalKeywordArgs(n.kwargs)
 	if err != nil {
 		return Undefined(), err
 	}
 
+	if fn.AsCallable().Name == "dict" {
+		value, err := fn.AsCallable().Fn(args, nil)
+		if err != nil {
+			return Undefined(), err
+		}
+		for _, key := range keys {
+			value.AsDict().Set(key, kwargs[key])
+		}
+		return value, nil
+	}
 	return fn.AsCallable().Fn(args, kwargs)
 }
 
-func (e *evaluator) evalKeywordArgs(keywords []kwarg) (map[string]Value, error) {
+func (e *evaluator) evalKeywordArgs(keywords []kwarg) (map[string]Value, []string, error) {
 	if len(keywords) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	kwargs := make(map[string]Value, len(keywords))
+	var keys []string
 	for _, kw := range keywords {
 		v, err := e.evalExpr(kw.value)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if kw.name != "" {
 			if _, exists := kwargs[kw.name]; exists {
-				return nil, fmt.Errorf("duplicate keyword argument: %s", kw.name)
+				return nil, nil, fmt.Errorf("duplicate keyword argument: %s", kw.name)
 			}
 			kwargs[kw.name] = v
+			keys = append(keys, kw.name)
 			continue
 		}
 		if !v.IsDict() {
-			return nil, fmt.Errorf("keyword argument expansion requires a mapping")
+			return nil, nil, fmt.Errorf("keyword argument expansion requires a mapping")
 		}
 		for _, key := range v.AsDict().Keys {
 			if _, exists := kwargs[key]; exists {
-				return nil, fmt.Errorf("duplicate keyword argument: %s", key)
+				return nil, nil, fmt.Errorf("duplicate keyword argument: %s", key)
 			}
 			kwargs[key] = v.AsDict().Data[key]
+			keys = append(keys, key)
 		}
 	}
-	return kwargs, nil
+	return kwargs, keys, nil
 }
 
 func callableName(ex expr) string {
@@ -981,7 +1172,7 @@ func (e *evaluator) evalFilter(n *filterExpr) (Value, error) {
 		args[i+1] = v
 	}
 
-	kwargs, err := e.evalKeywordArgs(n.kwargs)
+	kwargs, _, err := e.evalKeywordArgs(n.kwargs)
 	if err != nil {
 		return Undefined(), err
 	}
@@ -1026,44 +1217,61 @@ func (e *evaluator) stringMethod(obj Value, method string) (Value, error) {
 	switch method {
 	case "strip":
 		return e.makeStringFunc("strip", func(args []Value, kwargs map[string]Value) (Value, error) {
-			if len(args) > 0 {
+			if len(args) > 0 && !args[0].IsNone() {
 				return NewString(strings.Trim(s, printValue(args[0]))), nil
 			}
-			return NewString(strings.TrimSpace(s)), nil
+			return NewString(strings.TrimFunc(s, pythonWhitespace)), nil
 		}), nil
 
 	case "lstrip":
 		return e.makeStringFunc("lstrip", func(args []Value, kwargs map[string]Value) (Value, error) {
-			if len(args) > 0 {
+			if len(args) > 0 && !args[0].IsNone() {
 				return NewString(strings.TrimLeft(s, printValue(args[0]))), nil
 			}
-			return NewString(strings.TrimLeftFunc(s, func(r rune) bool {
-				return r == ' ' || r == '\t' || r == '\n' || r == '\r'
-			})), nil
+			return NewString(strings.TrimLeftFunc(s, pythonWhitespace)), nil
 		}), nil
 
 	case "rstrip":
 		return e.makeStringFunc("rstrip", func(args []Value, kwargs map[string]Value) (Value, error) {
-			if len(args) > 0 {
+			if len(args) > 0 && !args[0].IsNone() {
 				return NewString(strings.TrimRight(s, printValue(args[0]))), nil
 			}
-			return NewString(strings.TrimRightFunc(s, func(r rune) bool {
-				return r == ' ' || r == '\t' || r == '\n' || r == '\r'
-			})), nil
+			return NewString(strings.TrimRightFunc(s, pythonWhitespace)), nil
 		}), nil
 
 	case "split":
 		return e.makeStringFunc("split", func(args []Value, kwargs map[string]Value) (Value, error) {
-			if len(args) == 0 {
-				parts := strings.Fields(s)
-				items := make([]Value, len(parts))
-				for i, p := range parts {
-					items[i] = NewString(p)
-				}
-				return NewList(items), nil
+			maxsplit := -1
+			if len(args) > 1 {
+				maxsplit = int(toInt64(args[1]))
 			}
-			sep := printValue(args[0])
-			parts := strings.Split(s, sep)
+			var parts []string
+			if len(args) == 0 || args[0].IsNone() {
+				rest := strings.TrimLeftFunc(s, pythonWhitespace)
+				for rest != "" {
+					if maxsplit >= 0 && len(parts) == maxsplit {
+						parts = append(parts, rest)
+						break
+					}
+					index := strings.IndexFunc(rest, pythonWhitespace)
+					if index < 0 {
+						parts = append(parts, rest)
+						break
+					}
+					parts = append(parts, rest[:index])
+					rest = strings.TrimLeftFunc(rest[index:], pythonWhitespace)
+				}
+			} else {
+				sep := printValue(args[0])
+				if sep == "" {
+					return Undefined(), fmt.Errorf("split: empty separator")
+				}
+				n := -1
+				if maxsplit >= 0 {
+					n = maxsplit + 1
+				}
+				parts = strings.SplitN(s, sep, n)
+			}
 			items := make([]Value, len(parts))
 			for i, p := range parts {
 				items[i] = NewString(p)
@@ -1071,20 +1279,56 @@ func (e *evaluator) stringMethod(obj Value, method string) (Value, error) {
 			return NewList(items), nil
 		}), nil
 
-	case "startswith":
-		return e.makeStringFunc("startswith", func(args []Value, kwargs map[string]Value) (Value, error) {
+	case "startswith", "endswith", "count", "find":
+		return e.makeStringFunc(method, func(args []Value, kwargs map[string]Value) (Value, error) {
 			if len(args) == 0 {
-				return NewBool(false), nil
+				return Undefined(), fmt.Errorf("%s requires an argument", method)
 			}
-			return NewBool(strings.HasPrefix(s, printValue(args[0]))), nil
-		}), nil
-
-	case "endswith":
-		return e.makeStringFunc("endswith", func(args []Value, kwargs map[string]Value) (Value, error) {
-			if len(args) == 0 {
-				return NewBool(false), nil
+			runes := []rune(s)
+			start, end := 0, len(runes)
+			if len(args) > 1 && !args[1].IsNone() {
+				start = int(toInt64(args[1]))
+				if start < 0 {
+					start += len(runes)
+				}
+				start = max(start, 0)
 			}
-			return NewBool(strings.HasSuffix(s, printValue(args[0]))), nil
+			if len(args) > 2 && !args[2].IsNone() {
+				end = int(toInt64(args[2]))
+				if end < 0 {
+					end += len(runes)
+				}
+				end = min(max(end, 0), len(runes))
+			}
+			valid := start <= end
+			part := ""
+			if valid {
+				part = string(runes[start:end])
+			}
+			switch method {
+			case "startswith", "endswith":
+				patterns := []Value{args[0]}
+				if args[0].IsList() && args[0].AsList().tuple {
+					patterns = args[0].AsList().Items
+				}
+				for _, pattern := range patterns {
+					if valid && ((method == "startswith" && strings.HasPrefix(part, printValue(pattern))) || (method == "endswith" && strings.HasSuffix(part, printValue(pattern)))) {
+						return NewBool(true), nil
+					}
+				}
+				return NewBool(false), nil
+			case "count":
+				if !valid {
+					return NewInt(0), nil
+				}
+				return NewInt(int64(strings.Count(part, printValue(args[0])))), nil
+			default:
+				index := strings.Index(part, printValue(args[0]))
+				if !valid || index < 0 {
+					return NewInt(-1), nil
+				}
+				return NewInt(int64(start + utf8.RuneCountInString(part[:index]))), nil
+			}
 		}), nil
 
 	case "replace":
@@ -1113,16 +1357,15 @@ func (e *evaluator) stringMethod(obj Value, method string) (Value, error) {
 
 	case "title":
 		return e.makeStringFunc("title", func(args []Value, kwargs map[string]Value) (Value, error) {
-			// Simple title case: capitalize first letter of each word.
 			runes := []rune(s)
 			inWord := false
 			for i, r := range runes {
-				if r == ' ' || r == '\t' || r == '\n' {
-					inWord = false
-				} else if !inWord {
-					runes[i] = []rune(strings.ToUpper(string(r)))[0]
-					inWord = true
+				if !inWord {
+					runes[i] = unicode.ToTitle(r)
+				} else {
+					runes[i] = unicode.ToLower(r)
 				}
+				inWord = unicode.IsUpper(r) || unicode.IsLower(r) || unicode.IsTitle(r)
 			}
 			return NewString(string(runes)), nil
 		}), nil
@@ -1132,25 +1375,9 @@ func (e *evaluator) stringMethod(obj Value, method string) (Value, error) {
 			if len(s) == 0 {
 				return NewString(""), nil
 			}
-			runes := []rune(s)
-			runes[0] = []rune(strings.ToUpper(string(runes[0])))[0]
+			runes := []rune(strings.ToLower(s))
+			runes[0] = unicode.ToTitle(runes[0])
 			return NewString(string(runes)), nil
-		}), nil
-
-	case "count":
-		return e.makeStringFunc("count", func(args []Value, kwargs map[string]Value) (Value, error) {
-			if len(args) == 0 {
-				return NewInt(0), nil
-			}
-			return NewInt(int64(strings.Count(s, printValue(args[0])))), nil
-		}), nil
-
-	case "find":
-		return e.makeStringFunc("find", func(args []Value, kwargs map[string]Value) (Value, error) {
-			if len(args) == 0 {
-				return NewInt(-1), nil
-			}
-			return NewInt(int64(strings.Index(s, printValue(args[0])))), nil
 		}), nil
 
 	case "format":
@@ -1170,6 +1397,10 @@ func (e *evaluator) stringMethod(obj Value, method string) (Value, error) {
 
 func (e *evaluator) makeStringFunc(name string, fn func([]Value, map[string]Value) (Value, error)) Value {
 	return NewCallable("str."+name, fn)
+}
+
+func pythonWhitespace(r rune) bool {
+	return unicode.IsSpace(r) || r >= '\x1c' && r <= '\x1f'
 }
 
 // =============================================================================
@@ -1392,21 +1623,71 @@ func divValues(a, b Value) Value {
 }
 
 func floorDivValues(a, b Value) Value {
+	if a.IsFloat() || b.IsFloat() {
+		dividend, divisor := toFloat64(a), toFloat64(b)
+		remainder := math.Mod(dividend, divisor)
+		quotient := (dividend - remainder) / divisor
+		if remainder != 0 && math.Signbit(remainder) != math.Signbit(divisor) {
+			quotient--
+		}
+		if quotient == 0 {
+			return NewFloat(math.Copysign(0, dividend/divisor))
+		}
+		floor := math.Floor(quotient)
+		if quotient-floor > 0.5 {
+			floor++
+		}
+		return NewFloat(floor)
+	}
 	bi := toInt64(b)
 	if bi == 0 {
 		return NewInt(0)
 	}
-	return NewInt(toInt64(a) / bi)
+	ai := toInt64(a)
+	quotient := ai / bi
+	if ai%bi != 0 && (ai < 0) != (bi < 0) {
+		quotient--
+	}
+	return NewInt(quotient)
 }
 
 func modValues(a, b Value) Value {
+	if a.IsFloat() || b.IsFloat() {
+		divisor := toFloat64(b)
+		remainder := math.Mod(toFloat64(a), divisor)
+		if remainder != 0 && math.Signbit(remainder) != math.Signbit(divisor) {
+			remainder += divisor
+		}
+		if remainder == 0 {
+			remainder = math.Copysign(0, divisor)
+		}
+		return NewFloat(remainder)
+	}
 	bi := toInt64(b)
 	if bi == 0 {
 		return NewInt(0)
 	}
-	return NewInt(toInt64(a) % bi)
+	remainder := toInt64(a) % bi
+	if remainder != 0 && (remainder < 0) != (bi < 0) {
+		remainder += bi
+	}
+	return NewInt(remainder)
 }
 
 func powValues(a, b Value) Value {
-	return NewFloat(math.Pow(toFloat64(a), toFloat64(b)))
+	f := math.Pow(toFloat64(a), toFloat64(b))
+	if (a.IsInt() || a.IsBool()) && (b.IsInt() || b.IsBool()) && toInt64(b) >= 0 && f >= -0x1p63 && f < 0x1p63 {
+		result, base, exponent := int64(1), toInt64(a), toInt64(b)
+		for exponent > 0 {
+			if exponent&1 != 0 {
+				result *= base
+			}
+			exponent >>= 1
+			if exponent > 0 {
+				base *= base
+			}
+		}
+		return NewInt(result)
+	}
+	return NewFloat(f)
 }

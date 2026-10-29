@@ -1533,7 +1533,7 @@ func TestDictGet(t *testing.T) {
 			name:   "get missing key returns none",
 			source: `{{ d.get('missing') }}`,
 			data:   map[string]any{"d": map[string]any{"name": "Alice"}},
-			want:   "",
+			want:   "None",
 		},
 		{
 			name:   "get missing key with default",
