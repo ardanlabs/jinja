@@ -1,0 +1,69 @@
+<s><|start|>system<|message|>You are a helpful AI assistant.
+
+Knowledge cutoff: 2026-01-04.
+
+Current date: 2026-11-01.
+
+You are a travel assistant.
+
+In this environment you have access to a set of tools you can use to answer the user's question.
+
+You can invoke a function by writing a "<atem:function_calls>" block like the following as part of your reply to the user:
+<atem:function_calls>
+<atem:invoke name="$FUNCTION_NAME">
+<atem:parameter name="$PARAMETER_NAME">$PARAMETER_VALUE</atem:parameter>
+...
+</atem:invoke>
+</atem:function_calls>
+
+String and scalar parameters should be specified as is, while lists and objects should use JSON format. Note that spaces for string values are not stripped. The output is not expected to be valid XML and is parsed with regular expressions.
+Here are the functions available in JSONSchema format:
+// Tool metadata
+{"name": "", "description": ""}
+{"name": "booking", "description": "Restaurant booking tools. [deferred: use tool_search to discover functions]", "has_deferred_functions": true}
+{"name": "maps", "description": "Map lookups."}
+// Function schemas
+{"name": "get_weather", "description": "Get the weather forecast for a location.", "parameters": {"properties": {"days": {"description": "Number of days to forecast.", "type": "integer"}, "location": {"description": "The city name.", "type": "string"}}, "required": ["location"], "type": "object", "additionalProperties": false}}
+{"name": "booking.search_restaurants", "description": "Search restaurants in a city.", "parameters": {"properties": {"city": {"type": "string"}}, "required": ["city"], "type": "object", "additionalProperties": false}}
+{"name": "maps.directions", "description": "Walking directions between two places.", "parameters": {"properties": {"from": {"type": "string"}, "to": {"type": "string"}}, "required": ["from", "to"], "type": "object", "additionalProperties": false}}
+
+Here are examples of how to call functions in the tool set. To make parallel tool calls, emit each call as its own message (one tool call per message) in consecutive messages, as shown below:
+(If the tool namespace is not specified, invoke the function directly as `example_function_name_1` rather than `example_tool_name_1.example_function_name_1`)
+
+to=example_tool_name_1.example_function_name_1
+
+<atem:function_calls>
+<atem:invoke name="example_tool_name_1.example_function_name_1">
+<atem:parameter name="example_parameter_1">value_1</atem:parameter>
+</atem:invoke>
+</atem:function_calls>
+
+to=example_tool_name_2.example_function_name_2
+
+<atem:function_calls>
+<atem:invoke name="example_tool_name_2.example_function_name_2">
+<atem:parameter name="example_parameter_2">This is the value for the second parameter
+that can span
+"multiple" lines
+</atem:parameter>
+<atem:parameter name="example_parameter_3">value_3</atem:parameter>
+</atem:invoke>
+</atem:function_calls>
+
+Reasoning strength: 32.
+
+Use the appropriate recipient for each message:
+
+- "self": private reasoning and tool planning.
+- "commentary": user-visible intermediate updates while the assistant will continue working, including messages sent to the user before or between tool calls.
+- "tool" or "[tool name]": the name of the tool to call.
+- "user": messages that end the assistant turn, such as a completed response or clarification question that waits for the user's reply; do not use for pre-tool updates or partial responses.
+
+# Valid recipients: "self", "commentary", "[func_name] (e.g., get_weather)", "booking.*", "maps.*", "user".<|eot|><|start|>user<|message|>What is the weather in Paris, and can you book me a table there?<|eot|><|start|>assistant to=get_weather<|message|><atem:function_calls>
+<atem:invoke name="get_weather">
+<atem:parameter name="days">2</atem:parameter>
+<atem:parameter name="location">Paris</atem:parameter>
+</atem:invoke>
+</atem:function_calls><|eot|><|start|>tool get_weather<|message|><tool_output name="get_weather">
+{"temperature": "18C", "condition": "cloudy"}
+</tool_output><|eot|><|start|>assistant to=user<|message|>It is 18C and cloudy in Paris. Which restaurant would you like?<|eot|><|start|>user<|message|>Le Petit Zinc at 8pm, please.<|eot|><|start|>assistant

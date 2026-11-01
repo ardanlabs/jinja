@@ -23,9 +23,10 @@ import (
 // The reference output is produced on demand by scripts/render_python.py,
 // which uses the same `jinja2.sandbox.ImmutableSandboxedEnvironment` setup
 // HuggingFace's `transformers.PreTrainedTokenizerBase.apply_chat_template`
-// uses. There are no checked-in golden files: adding a template (drop it in
-// testdata/templates/) or a captured request (drop it in testdata/requests/)
-// just makes the next `go test` run pick it up automatically.
+// uses. This harness has no checked-in golden files: adding a template (drop it
+// in testdata/templates/) or a captured request (drop it in testdata/requests/)
+// just makes the next `go test` run pick it up automatically. A request that
+// only suits one template belongs in testdata/golden/ instead.
 //
 // The script is launched via `uv` so no Python venv setup is required. If `uv`
 // is not on PATH the test is skipped with an explanatory message.

@@ -13,10 +13,11 @@ Output shape:
 
 The Go test in requests_test.go invokes this script once per `go test` run via
 `uv run --with "jinja2>=3.1" python scripts/render_python.py` and uses the
-returned map as the canonical reference for byte-for-byte comparison. There are
-no checked-in pre-rendered "golden" files — adding a new template or request is
-just a matter of dropping the file in testdata/, and the next test run picks it
-up automatically.
+returned map as the canonical reference for byte-for-byte comparison. This
+harness has no checked-in pre-rendered "golden" files — adding a new template or
+request is just a matter of dropping the file in testdata/, and the next test
+run picks it up automatically. The files in testdata/golden/ are separate: they
+pin a request that only suits one template.
 """
 
 from __future__ import annotations

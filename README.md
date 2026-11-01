@@ -151,6 +151,8 @@ See the [examples](examples/) directory for more, including tool calling.
 
 `defined` · `undefined` · `none` · `boolean` · `integer` · `float` · `number` · `string` · `mapping` · `iterable` · `sequence` · `callable` · `true` · `false` · `odd` · `even` · `upper` · `lower` · `sameas` · `eq` · `ne` · `gt` · `ge` · `lt` · `le` · `in`
 
+As in Jinja2, a test takes its argument in parentheses or as one bare value: `x is sameas(false)`, `x is sameas false`, `x is in [1, 2]`.
+
 ### Global Functions
 
 `namespace` · `range` · `dict` · `joiner` · `cycler` · `raise_exception` · `strftime_now`

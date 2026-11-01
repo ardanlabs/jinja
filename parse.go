@@ -479,22 +479,9 @@ func (p *exprParser) parseComparison() (expr, error) {
 			testName := testTok.val
 
 			// Parse optional arguments.
-			var testArgs []expr
-			if p.peek().kind == tokLParen {
-				p.advance()
-				for p.peek().kind != tokRParen && p.peek().kind != tokEOF {
-					arg, err := p.parseExpression()
-					if err != nil {
-						return nil, err
-					}
-					testArgs = append(testArgs, arg)
-					if p.peek().kind == tokComma {
-						p.advance()
-					}
-				}
-				if _, err := p.expect(tokRParen, ")"); err != nil {
-					return nil, err
-				}
+			testArgs, err := p.parseTestArgs(testTok)
+			if err != nil {
+				return nil, err
 			}
 
 			left = &testExpr{
@@ -503,6 +490,16 @@ func (p *exprParser) parseComparison() (expr, error) {
 				negated: negated,
 				args:    testArgs,
 			}
+
+			// As in Jinja2, a filter here applies to the test's result. A bare
+			// argument stops short of it, so `x is sameas y | string` is
+			// `(x is sameas y) | string`.
+			for p.peek().kind == tokPipe {
+				left, err = p.parseFilter(left)
+				if err != nil {
+					return nil, err
+				}
+			}
 			continue
 		}
 
@@ -510,6 +507,75 @@ func (p *exprParser) parseComparison() (expr, error) {
 	}
 
 	return left, nil
+}
+
+// parseTestArgs parses what follows a test's name, mirroring Jinja2's
+// Parser.parse_test: a parenthesised argument list, or one bare argument, which
+// is a primary expression plus attribute access, subscripts and calls, with no
+// operators or filters.
+func (p *exprParser) parseTestArgs(testTok tok) ([]expr, error) {
+	if p.peek().kind == tokLParen {
+		p.advance()
+		var args []expr
+		for p.peek().kind != tokRParen && p.peek().kind != tokEOF {
+			arg, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, arg)
+			if p.peek().kind == tokComma {
+				p.advance()
+			}
+		}
+		if _, err := p.expect(tokRParen, ")"); err != nil {
+			return nil, err
+		}
+		return args, nil
+	}
+
+	if testTok.kind != tokName || !startsBareTestArg(p.peek()) {
+		return nil, nil
+	}
+
+	// Only `is` straight after the test's name is an error, as in Jinja2.
+	// `x is sameas y is true` is a test of the first test's result.
+	if t := p.peek(); t.kind == tokName && t.val == "is" {
+		return nil, fmt.Errorf("cannot chain multiple tests with is")
+	}
+
+	arg, err := p.parseAtom()
+	if err != nil {
+		return nil, err
+	}
+
+	arg, err = p.parseTrailers(arg, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return []expr{arg}, nil
+}
+
+// startsBareTestArg reports whether t begins a test's bare argument.
+//
+// Jinja2 excludes only `else`, `or` and `and`, and takes any other name as the
+// argument. `if`, `in` and `not` are excluded here too, because they carry on
+// the expression (`x is defined if y else z`, `x is defined not in y`) and that
+// already worked. Taking them as arguments would quietly turn `not in` into
+// `in`, since tests here ignore arguments they do not use. An opening paren is
+// not listed because it starts the parenthesised form.
+func startsBareTestArg(t tok) bool {
+	switch t.kind {
+	case tokString, tokInt, tokFloat, tokLBracket, tokLBrace:
+		return true
+	case tokName:
+		switch t.val {
+		case "and", "or", "else", "if", "in", "not":
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 func (p *exprParser) parseConcat() (expr, error) {
@@ -617,6 +683,14 @@ func (p *exprParser) parsePostfix() (expr, error) {
 		return nil, err
 	}
 
+	return p.parseTrailers(e, true)
+}
+
+// parseTrailers applies the attribute accesses, subscripts and calls that
+// follow e, and any filters when withFilters is set.
+func (p *exprParser) parseTrailers(e expr, withFilters bool) (expr, error) {
+	var err error
+
 	for {
 		t := p.peek()
 
@@ -710,28 +784,10 @@ func (p *exprParser) parsePostfix() (expr, error) {
 		}
 
 		// Filter: e | filtername or e | filtername(args)
-		if t.kind == tokPipe {
-			p.advance()
-			filterTok := p.advance()
-			if filterTok.kind != tokName {
-				return nil, fmt.Errorf("expected filter name after '|', got %q", filterTok.val)
-			}
-
-			var filterArgs []expr
-			var filterKwargs []kwarg
-			if p.peek().kind == tokLParen {
-				p.advance()
-				filterArgs, filterKwargs, err = p.parseCallArgs()
-				if err != nil {
-					return nil, err
-				}
-			}
-
-			e = &filterExpr{
-				expr:   e,
-				name:   filterTok.val,
-				args:   filterArgs,
-				kwargs: filterKwargs,
+		if withFilters && t.kind == tokPipe {
+			e, err = p.parseFilter(e)
+			if err != nil {
+				return nil, err
 			}
 			continue
 		}
@@ -740,6 +796,34 @@ func (p *exprParser) parsePostfix() (expr, error) {
 	}
 
 	return e, nil
+}
+
+// parseFilter parses `| filtername` or `| filtername(args)` applied to e. The
+// next token must be the pipe.
+func (p *exprParser) parseFilter(e expr) (expr, error) {
+	p.advance()
+	filterTok := p.advance()
+	if filterTok.kind != tokName {
+		return nil, fmt.Errorf("expected filter name after '|', got %q", filterTok.val)
+	}
+
+	var args []expr
+	var kwargs []kwarg
+	if p.peek().kind == tokLParen {
+		p.advance()
+		var err error
+		args, kwargs, err = p.parseCallArgs()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &filterExpr{
+		expr:   e,
+		name:   filterTok.val,
+		args:   args,
+		kwargs: kwargs,
+	}, nil
 }
 
 func (p *exprParser) parseAtom() (expr, error) {

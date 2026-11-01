@@ -1,0 +1,163 @@
+{
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "content": "You are a travel assistant.",
+      "role": "system"
+    },
+    {
+      "content": "What is the weather in Paris, and can you book me a table there?",
+      "role": "user"
+    },
+    {
+      "content": "",
+      "role": "assistant",
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"days\": 2, \"location\": \"Paris\"}",
+            "name": "get_weather"
+          },
+          "id": "call_1",
+          "type": "function"
+        }
+      ]
+    },
+    {
+      "content": "{\"temperature\": \"18C\", \"condition\": \"cloudy\"}",
+      "name": "get_weather",
+      "role": "tool",
+      "tool_call_id": "call_1"
+    },
+    {
+      "content": "It is 18C and cloudy in Paris. Which restaurant would you like?",
+      "role": "assistant"
+    },
+    {
+      "content": "Le Petit Zinc at 8pm, please.",
+      "role": "user"
+    }
+  ],
+  "model": "test",
+  "temperature": 0.7,
+  "tools": [
+    {
+      "function": {
+        "description": "Get the weather forecast for a location.",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "days": {
+              "description": "Number of days to forecast.",
+              "type": "integer"
+            },
+            "location": {
+              "description": "The city name.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "location"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    },
+    {
+      "defer_loading": true,
+      "description": "Restaurant booking tools.",
+      "name": "booking",
+      "tools": [
+        {
+          "function": {
+            "defer_loading": false,
+            "description": "Search restaurants in a city.",
+            "name": "search_restaurants",
+            "parameters": {
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        },
+        {
+          "function": {
+            "defer_loading": true,
+            "description": "Book a table at a restaurant.",
+            "name": "book_table",
+            "parameters": {
+              "properties": {
+                "restaurant": {
+                  "type": "string"
+                },
+                "time": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "restaurant",
+                "time"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        },
+        {
+          "function": {
+            "description": "Cancel a booking.",
+            "name": "cancel_booking",
+            "parameters": {
+              "properties": {
+                "booking_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "booking_id"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ],
+      "type": "namespace"
+    },
+    {
+      "description": "Map lookups.",
+      "name": "maps",
+      "tools": [
+        {
+          "defer_loading": false,
+          "description": "Walking directions between two places.",
+          "name": "directions",
+          "parameters": {
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "type": "object"
+          }
+        }
+      ],
+      "type": "namespace"
+    }
+  ]
+}
