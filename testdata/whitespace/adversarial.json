@@ -1,0 +1,1190 @@
+[
+ {
+  "name": "bleed-right-var-past-var",
+  "template": "{{ x -}}{{ y }}  z|"
+ },
+ {
+  "name": "bleed-right-var-past-cmt",
+  "template": "{{ x -}}{# d #}  z|"
+ },
+ {
+  "name": "bleed-right-var-past-raw",
+  "template": "{{ x -}}{% raw %}{% endraw %}  z|"
+ },
+ {
+  "name": "bleed-right-if-past-var",
+  "template": "{% if yes -%}{{ y }}  z{% endif %}|"
+ },
+ {
+  "name": "bleed-right-if-past-cmt",
+  "template": "{% if yes -%}{# d #}  z{% endif %}|"
+ },
+ {
+  "name": "bleed-right-cmt-past-raw",
+  "template": "{# c -#}{% raw %}{% endraw %}  z|"
+ },
+ {
+  "name": "bleed-right-endraw-past-var",
+  "template": "{% raw %}r{% endraw -%}{{ y }}  z|"
+ },
+ {
+  "name": "bleed-left-var-past-var",
+  "template": "a  {{ y }}{{- x }}|"
+ },
+ {
+  "name": "bleed-left-var-past-cmt",
+  "template": "a  {# d #}{{- x }}|"
+ },
+ {
+  "name": "bleed-left-var-past-raw",
+  "template": "a  {% raw %}{% endraw %}{{- x }}|"
+ },
+ {
+  "name": "bleed-left-if-past-var",
+  "template": "a  {{ y }}{%- if yes %}b{% endif %}|"
+ },
+ {
+  "name": "bleed-left-if-past-cmt",
+  "template": "a  {# d #}{%- if yes %}b{% endif %}|"
+ },
+ {
+  "name": "bleed-left-cmt-past-var",
+  "template": "a  {{ y }}{#- c #}|"
+ },
+ {
+  "name": "bleed-left-raw-past-cmt",
+  "template": "a  {# d #}{%- raw %}r{% endraw %}|"
+ },
+ {
+  "name": "bleed-right-var-past-set",
+  "template": "{{ x -}}{% set w = 2 %}  z|"
+ },
+ {
+  "name": "bleed-left-var-past-set",
+  "template": "a  {% set w = 2 %}{{- x }}|"
+ },
+ {
+  "name": "bleed-only-adjacent-run-left",
+  "template": "a  {# c #}  {{- x }}|"
+ },
+ {
+  "name": "bleed-only-adjacent-run-right",
+  "template": "{{ x -}}  {# c #}  z|"
+ },
+ {
+  "name": "bleed-into-if-body-left",
+  "template": "a  {% if yes %}{{- x }}{% endif %}|"
+ },
+ {
+  "name": "bleed-out-of-if-body-right",
+  "template": "{% if yes %}{{ x -}}{% endif %}  b|"
+ },
+ {
+  "name": "bleed-out-of-for-body",
+  "template": "{% for i in items %}{{ i -}}{% endfor %}  b|"
+ },
+ {
+  "name": "bleed-into-for-body",
+  "template": "{% for i in items %}  {{- i }}{% endfor %}|"
+ },
+ {
+  "name": "bleed-untaken-left",
+  "template": "a  {% if no %}{{- x }}{% endif %}|"
+ },
+ {
+  "name": "bleed-untaken-right",
+  "template": "{% if no %}{{ x -}}{% endif %}  b|"
+ },
+ {
+  "name": "closer-var-two-newlines",
+  "template": "{{ x }}\n\n b|"
+ },
+ {
+  "name": "closer-var-minus-two-newlines",
+  "template": "{{ x -}}\n\n b|"
+ },
+ {
+  "name": "closer-block-two-newlines",
+  "template": "{% set z = 1 %}\n\n b|"
+ },
+ {
+  "name": "closer-block-minus-two-newlines",
+  "template": "{% set z = 1 -%}\n\n b|"
+ },
+ {
+  "name": "closer-block-plus-two-newlines",
+  "template": "{% set z = 1 +%}\n\n b|"
+ },
+ {
+  "name": "closer-cmt-two-newlines",
+  "template": "{# c #}\n\n b|"
+ },
+ {
+  "name": "closer-cmt-minus-two-newlines",
+  "template": "{# c -#}\n\n b|"
+ },
+ {
+  "name": "closer-cmt-plus-two-newlines",
+  "template": "{# c +#}\n\n b|"
+ },
+ {
+  "name": "closer-endraw-two-newlines",
+  "template": "{% raw %}r{% endraw %}\n\n b|"
+ },
+ {
+  "name": "closer-endraw-minus-two-newlines",
+  "template": "{% raw %}r{% endraw -%}\n\n b|"
+ },
+ {
+  "name": "closer-endraw-plus-two-newlines",
+  "template": "{% raw %}r{% endraw +%}\n\n b|"
+ },
+ {
+  "name": "closer-block-space-before-newline",
+  "template": "{% set z = 1 %} \n b|"
+ },
+ {
+  "name": "closer-rawbegin-two-newlines",
+  "template": "{% raw %}\n\n b{% endraw %}|"
+ },
+ {
+  "name": "closer-rawbegin-minus-two-newlines",
+  "template": "{% raw -%}\n\n b{% endraw %}|"
+ },
+ {
+  "name": "lstrip-if-start",
+  "template": "  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-newline",
+  "template": "a\n  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-text",
+  "template": "a  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-var",
+  "template": "{{ x }}  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-block-newline",
+  "template": "{% set z = 1 %}\n  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-block",
+  "template": "{% set z = 1 %}  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-plus-block",
+  "template": "{% set z = 1 +%}  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-cmt-newline",
+  "template": "{# c #}\n  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-cmt",
+  "template": "{# c #}  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-endraw-newline",
+  "template": "{% raw %}r{% endraw %}\n  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-if-after-endraw",
+  "template": "{% raw %}r{% endraw %}  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-cmt-start",
+  "template": "  {# c #}b|"
+ },
+ {
+  "name": "lstrip-raw-start",
+  "template": "  {% raw %}r{% endraw %}|"
+ },
+ {
+  "name": "lstrip-var-after-newline",
+  "template": "a\n  {{ x }}|"
+ },
+ {
+  "name": "lstrip-cmt-after-newline",
+  "template": "a\n  {# c #}b|"
+ },
+ {
+  "name": "lstrip-raw-after-newline",
+  "template": "a\n  {% raw %}r{% endraw %}|"
+ },
+ {
+  "name": "lstrip-plus-if-after-newline",
+  "template": "a\n  {%+ if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-tab-space-mix",
+  "template": "a\n\t \t{% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-only-last-line",
+  "template": "a\n  \n\n  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "lstrip-two-tags-one-line",
+  "template": "  {% if yes %}  {% if yes %}  a  {% endif %}  {% endif %}  |"
+ },
+ {
+  "name": "lstrip-nested-over-lines",
+  "template": "  {% if yes %}\n  {% if yes %}\n  a\n  {% endif %}\n  {% endif %}\n  b|"
+ },
+ {
+  "name": "lstrip-set-set-var-var",
+  "template": "  {% set a = 1 %}  {% set b = 2 %}\n  {{ a }}  {{ b }}\n|"
+ },
+ {
+  "name": "lstrip-comments-one-line",
+  "template": "  {# a #}  {# b #}  \n  {# c #}\n|"
+ },
+ {
+  "name": "lstrip-ws-line-between-tags",
+  "template": "{% if yes %}\n   \n   {% endif %}\n   \n|"
+ },
+ {
+  "name": "newline-crlf-cr-text",
+  "template": "a\r\nb\rc\n\rd|"
+ },
+ {
+  "name": "newline-crlf-trim-block",
+  "template": "{% if yes %}\r\nb\r\n{% endif %}\r\nc|"
+ },
+ {
+  "name": "newline-cr-trim-block",
+  "template": "{% if yes %}\rb\r{% endif %}\rc|"
+ },
+ {
+  "name": "newline-cr-trim-comment",
+  "template": "{# c #}\rb|"
+ },
+ {
+  "name": "newline-crlf-lstrip",
+  "template": "a\r\n  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "newline-cr-lstrip",
+  "template": "a\r  {% if yes %}b{% endif %}|"
+ },
+ {
+  "name": "newline-cr-minus-both",
+  "template": "a \r {{- x -}} \r b|"
+ },
+ {
+  "name": "newline-crlf-in-tag",
+  "template": "{%\r\n if yes\r\n%}\r\nb{% endif %}|"
+ },
+ {
+  "name": "newline-crlf-in-comment-then-tag",
+  "template": "{# a\r\nb #}\r\n  {% if yes %}c{% endif %}|"
+ },
+ {
+  "name": "newline-crlf-cr-in-string",
+  "template": "{{ \"a\r\nb\rc\" }}|"
+ },
+ {
+  "name": "newline-escaped-cr-in-string-survives",
+  "template": "{{ \"a\\r\\nb\" }}|"
+ },
+ {
+  "name": "newline-output-newline-not-trimmed",
+  "template": "{{ \"a\\n\" -}}\nb{{- \"\\n\" }}|"
+ },
+ {
+  "name": "newline-ml-not-trimmed",
+  "template": "a {{- ml -}} b|"
+ },
+ {
+  "name": "newline-output-spaces-not-trimmed",
+  "template": "a  {{- \"  \" -}}  b|"
+ },
+ {
+  "name": "plus-block-both",
+  "template": "a\n  {%+ if yes +%}\n  b\n  {%+ endif +%}\n  c|"
+ },
+ {
+  "name": "plus-block-minus-open-plus-close",
+  "template": "a\n  {%- if yes +%}\n  b\n  {%- endif +%}\n  c|"
+ },
+ {
+  "name": "plus-block-plus-open-minus-close",
+  "template": "a\n  {%+ if yes -%}\n  b\n  {%+ endif -%}\n  c|"
+ },
+ {
+  "name": "plus-cmt-both",
+  "template": "a\n  {#+ c +#}\n  b|"
+ },
+ {
+  "name": "plus-cmt-minus-open-plus-close",
+  "template": "a\n  {#- c +#}\n  b|"
+ },
+ {
+  "name": "plus-cmt-plus-open-minus-close",
+  "template": "a\n  {#+ c -#}\n  b|"
+ },
+ {
+  "name": "plus-var-plus-open-minus-close",
+  "template": "a\n  {{+ x -}}\n  b|"
+ },
+ {
+  "name": "plus-cannot-restore-left",
+  "template": "{{ x -}}  {%+ if yes %}b{% endif %}|"
+ },
+ {
+  "name": "plus-cannot-restore-right",
+  "template": "{% if yes +%}  \n  {%- endif %}|"
+ },
+ {
+  "name": "plus-else-elif",
+  "template": "{% if no %}a{%+ elif no +%}\nb\n  {%+ else +%}\nc\n  {%+ endif +%}\nd|"
+ },
+ {
+  "name": "plus-for",
+  "template": "  {%+ for i in items +%}\n  {{ i }}\n  {%+ endfor +%}\n|"
+ },
+ {
+  "name": "plus-set-and-endset",
+  "template": "  {%+ set z +%}\n  a\n  {%+ endset +%}\n[{{ z }}]|"
+ },
+ {
+  "name": "plus-whitespace-before-closer",
+  "template": "{% if yes\n+%}\nb{% endif\n\t+%}\nc|"
+ },
+ {
+  "name": "err-var-plus-close",
+  "template": "{{ x +}}"
+ },
+ {
+  "name": "err-var-minus-open-plus-close",
+  "template": "a {{- x +}} b"
+ },
+ {
+  "name": "err-block-plus-spaced",
+  "template": "{% if yes + %}a{% endif %}"
+ },
+ {
+  "name": "err-var-minus-no-close",
+  "template": "{{ x- }}"
+ },
+ {
+  "name": "err-two-signs-block-open",
+  "template": "{%-+ if yes %}a{% endif %}"
+ },
+ {
+  "name": "err-two-signs-close-minus-plus",
+  "template": "{% if yes -+%}a{% endif %}"
+ },
+ {
+  "name": "err-empty-block-minus",
+  "template": "{%-%}"
+ },
+ {
+  "name": "err-empty-var-minus-both",
+  "template": "{{--}}"
+ },
+ {
+  "name": "err-mismatch-var-block-minus",
+  "template": "{{ x -%}"
+ },
+ {
+  "name": "err-mismatch-block-var-minus",
+  "template": "{% if yes -}}a{% endif %}"
+ },
+ {
+  "name": "err-mismatch-cmt-var-close",
+  "template": "{# c -}}"
+ },
+ {
+  "name": "err-unbalanced-paren-var",
+  "template": "{{ (1 -}} )}}"
+ },
+ {
+  "name": "sign-minus-open-eats-negation",
+  "template": "a  {{-1}}|"
+ },
+ {
+  "name": "sign-minus-negation",
+  "template": "a {{- -1 -}} b|"
+ },
+ {
+  "name": "sign-double-minus-open",
+  "template": "a {{--1}} b|"
+ },
+ {
+  "name": "sign-plus-open-is-sign",
+  "template": "a  {{+1}}|"
+ },
+ {
+  "name": "sign-plus-spaced-is-unary",
+  "template": "a {{ +1 }} b|"
+ },
+ {
+  "name": "sign-minus-plus",
+  "template": "a  {{-+1}}|"
+ },
+ {
+  "name": "sign-name-tight-close",
+  "template": "{{x-}}  a|"
+ },
+ {
+  "name": "sign-subtract-spaced",
+  "template": "{{ 1 -1 }}|"
+ },
+ {
+  "name": "sign-subtract-tight-close",
+  "template": "{{ 1-1-}}  a|"
+ },
+ {
+  "name": "sign-if-tight",
+  "template": "a  {%-if yes-%}  b  {%-endif-%}  c|"
+ },
+ {
+  "name": "sign-if-tight-plus",
+  "template": "a\n  {%+if yes+%}\nb{%+endif+%}\nc|"
+ },
+ {
+  "name": "sign-set-spaced",
+  "template": "a  {%- set z = 2 -%}  {{ z }}|"
+ },
+ {
+  "name": "sign-set-subtract-tight",
+  "template": "{% set z = n-1-%}  {{ z }}|"
+ },
+ {
+  "name": "sign-set-add-plus-close",
+  "template": "{% set z = n+1+%}\n{{ z }}|"
+ },
+ {
+  "name": "sign-set-plus-close-tight",
+  "template": "{% set z = n+%}\n{{ z }}|"
+ },
+ {
+  "name": "sign-paren-tight-close",
+  "template": "{{ (n -1)-}}  a|"
+ },
+ {
+  "name": "sign-newlines-in-parens",
+  "template": "{{ (\n  n\n) -}}\n  a|"
+ },
+ {
+  "name": "sign-newlines-in-var",
+  "template": "a  {{-\n\n  x  \n\n-}}\n  b|"
+ },
+ {
+  "name": "sign-newlines-in-block",
+  "template": "a\n  {%-\n if yes\n-%}\n  b{%\n endif\n%}\nc|"
+ },
+ {
+  "name": "sign-delims-in-text",
+  "template": "a }} b %} c #} d -%} e -}} f +%} g|"
+ },
+ {
+  "name": "sign-near-openers-in-text",
+  "template": "a { { {- %} { % { # b\n  { % c|"
+ },
+ {
+  "name": "string-dash-var-close",
+  "template": "{{ \"-}}\" }}|"
+ },
+ {
+  "name": "string-block-close-in-var",
+  "template": "{{ \"%}\" -}}  a|"
+ },
+ {
+  "name": "string-dash-block-close-in-if",
+  "template": "{% if \"-%}\" %}a{% endif %}|"
+ },
+ {
+  "name": "string-block-close-in-if-trimmed",
+  "template": "{% if \"%}\" -%}  a{% endif %}|"
+ },
+ {
+  "name": "string-plus-close-in-set",
+  "template": "{% set s = \"+%}\" +%}\n{{ s }}|"
+ },
+ {
+  "name": "string-escaped-quote-then-close",
+  "template": "{{ \"\\\"-}}\" }}|"
+ },
+ {
+  "name": "string-escaped-backslash-then-close",
+  "template": "{{ \"\\\\\" -}}  a|"
+ },
+ {
+  "name": "string-real-newline",
+  "template": "{{ \"a\n  b\" -}}\n  c|"
+ },
+ {
+  "name": "cmt-dash-only",
+  "template": "a  {#-#}  b|"
+ },
+ {
+  "name": "cmt-dash-dash",
+  "template": "a  {#--#}  b|"
+ },
+ {
+  "name": "cmt-plus-only",
+  "template": "a\n  {#+#}\n  b|"
+ },
+ {
+  "name": "cmt-dash-plus",
+  "template": "a  {#-+#}\n  b|"
+ },
+ {
+  "name": "cmt-plus-dash",
+  "template": "a\n  {#+-#}\n  b|"
+ },
+ {
+  "name": "cmt-brace-body",
+  "template": "{#}#}|"
+ },
+ {
+  "name": "cmt-quote-does-not-protect",
+  "template": "{# \"-#}\" #}  b|"
+ },
+ {
+  "name": "cmt-close-then-text",
+  "template": "{# a #} #}\nb|"
+ },
+ {
+  "name": "cmt-dash-inside",
+  "template": "{# a - b -# } -#}  c|"
+ },
+ {
+  "name": "cmt-tags-in-body",
+  "template": "a  {#- {{ x }} {% if yes %} {% raw %} -#}  b|"
+ },
+ {
+  "name": "cmt-multiline-then-newline",
+  "template": "{#\n a\n  b\n#}\nc|"
+ },
+ {
+  "name": "cmt-eof-open",
+  "template": "a{#"
+ },
+ {
+  "name": "cmt-eof-open-minus",
+  "template": "a  {#-"
+ },
+ {
+  "name": "cmt-eof-open-two-newlines",
+  "template": "a{#\n\n"
+ },
+ {
+  "name": "cmt-eof-open-space",
+  "template": "a{# "
+ },
+ {
+  "name": "cmt-unterminated",
+  "template": "a{# c"
+ },
+ {
+  "name": "if-elif-plain",
+  "template": "{% if no %}\n  A\n{% elif yes %}\n  B\n{% else %}\n  C\n{% endif %}\nz|"
+ },
+ {
+  "name": "if-else-plain",
+  "template": "  {% if no %}\n  A\n  {% else %}\n  C\n  {% endif %}\nz|"
+ },
+ {
+  "name": "if-elif-all-minus",
+  "template": "{%- if no -%}\n  A\n{%- elif yes -%}\n  B\n{%- else -%}\n  C\n{%- endif -%}\n  z|"
+ },
+ {
+  "name": "if-minus-right-only",
+  "template": "{% if no -%} A {% else -%} C {% endif -%} z|"
+ },
+ {
+  "name": "if-untaken-elif-tag-trims",
+  "template": "{% if yes -%}\n A\n{%- elif no %}\n B\n{% endif %}|"
+ },
+ {
+  "name": "if-tag-spaced-branches",
+  "template": "a {% if no %} b {% elif no %} c {% else %} d {% endif %} e|"
+ },
+ {
+  "name": "if-nested-mixed",
+  "template": "{% if yes %}\n  {%- if no %}\n    a\n  {%- else -%}\n    b\n  {% endif -%}\n{% endif %}\nc|"
+ },
+ {
+  "name": "for-plain",
+  "template": "{% for i in items %}\n  {{ i }}\n{% endfor %}\nz|"
+ },
+ {
+  "name": "for-indented",
+  "template": "  {% for i in items %}\n    {{ i }}\n  {% endfor %}\n  z|"
+ },
+ {
+  "name": "for-minus-in",
+  "template": "{% for i in items -%}\n  {{ i }}\n{%- endfor %}|"
+ },
+ {
+  "name": "for-minus-left-var",
+  "template": "{%- for i in items %}\n  {{- i }}\n{%- endfor %}|"
+ },
+ {
+  "name": "for-separator-lines",
+  "template": "{% for i in items %}\n{{ i }}\n{%- if not loop.last %},\n{% endif %}\n{% endfor %}|"
+ },
+ {
+  "name": "for-else-plain",
+  "template": "{% for i in [] %}\n  a\n{% else %}\n  b\n{% endfor %}\nc|"
+ },
+ {
+  "name": "for-else-all-minus",
+  "template": "{% for i in [] -%}\n  a\n{%- else -%}\n  b\n{%- endfor -%}\n  c|"
+ },
+ {
+  "name": "for-continue-in-if",
+  "template": "{% for i in items %}\n  {% if i == \"a\" %}\n    {% continue %}\n  {% endif %}\n  {{ i }}\n{% endfor %}|"
+ },
+ {
+  "name": "for-continue-minus",
+  "template": "{% for i in items -%}  {%- if i == \"b\" -%}  {%- continue -%}  {%- endif -%}  {{ i }}  {%- endfor %}|"
+ },
+ {
+  "name": "for-break-plain",
+  "template": "{% for i in items %}\n  {{ i }}\n  {% break %}\n  never\n{% endfor %}|"
+ },
+ {
+  "name": "for-break-minus",
+  "template": "{% for i in items %}  {{ i }}  {%- break -%}  never  {% endfor %}  z|"
+ },
+ {
+  "name": "macro-plain",
+  "template": "{% macro m(a) %}\n  [{{ a }}]\n{% endmacro %}\n{{ m(1) }}\n{{ m(2) }}|"
+ },
+ {
+  "name": "macro-minus",
+  "template": "{%- macro m(a) -%}\n  [{{ a }}]\n{%- endmacro -%}\n  {{ m(1) }}|"
+ },
+ {
+  "name": "macro-output-not-trimmed",
+  "template": "{% macro m() %}  b  {% endmacro %}a  {{- m() -}}  c|"
+ },
+ {
+  "name": "set-capture-plain",
+  "template": "{% set z %}\n  a\n{% endset %}[{{ z }}]|"
+ },
+ {
+  "name": "set-capture-minus",
+  "template": "{%- set z -%}\n  a\n{%- endset -%}\n  [{{ z }}]|"
+ },
+ {
+  "name": "set-capture-filter",
+  "template": "{% set z | upper %}\n  a\n{% endset %}[{{ z }}]|"
+ },
+ {
+  "name": "set-capture-expr-minus",
+  "template": "{% set z -%}  {{ x }}  {%- endset %}[{{ z }}]|"
+ },
+ {
+  "name": "filter-plain",
+  "template": "{% filter upper %}\n  a\n{% endfilter %}\nb|"
+ },
+ {
+  "name": "filter-minus",
+  "template": "{%- filter upper -%}\n  a\n{%- endfilter -%}\n  b|"
+ },
+ {
+  "name": "filter-inline",
+  "template": "a  {% filter upper %}  b  {% endfilter %}  c|"
+ },
+ {
+  "name": "call-plain",
+  "template": "{% macro w() %}[{{ caller() }}]{% endmacro %}\n{% call w() %}\n  a\n{% endcall %}\nb|"
+ },
+ {
+  "name": "call-minus",
+  "template": "{% macro w() %}[{{ caller() }}]{% endmacro %}\n{%- call w() -%}\n  a\n{%- endcall -%}\n  b|"
+ },
+ {
+  "name": "shape-empty",
+  "template": ""
+ },
+ {
+  "name": "shape-space",
+  "template": " "
+ },
+ {
+  "name": "shape-space-then-newline",
+  "template": "  \n"
+ },
+ {
+  "name": "shape-newline-then-space",
+  "template": "\n  "
+ },
+ {
+  "name": "shape-spaces-lines",
+  "template": " \n \n "
+ },
+ {
+  "name": "shape-edges-block",
+  "template": "  {% if yes %}a{% endif %}  "
+ },
+ {
+  "name": "shape-edges-blank-lines",
+  "template": "\n\n  {% if yes %}a{% endif %}\n\n"
+ },
+ {
+  "name": "shape-edges-cmt",
+  "template": "  {# c #}  "
+ },
+ {
+  "name": "shape-only-tags-minus",
+  "template": "  \n  {%- if yes -%}  \n  {%- endif -%}  \n  "
+ },
+ {
+  "name": "raw-minus-all",
+  "template": "a  {%- raw -%}  b  {%- endraw -%}  c|"
+ },
+ {
+  "name": "raw-plus-open",
+  "template": "a\n  {%+ raw %}b{% endraw %}|"
+ },
+ {
+  "name": "raw-plus-close-illegal",
+  "template": "{% raw +%}b{% endraw %}|"
+ },
+ {
+  "name": "raw-spaced-minus-illegal",
+  "template": "{% raw - %}b{% endraw %}|"
+ },
+ {
+  "name": "raw-name-extra-illegal",
+  "template": "{% raw x %}b{% endraw %}|"
+ },
+ {
+  "name": "raw-endraw-plus-left",
+  "template": "{% raw %}b\n  {%+ endraw %}|"
+ },
+ {
+  "name": "raw-endraw-plus-right",
+  "template": "{% raw %}b{% endraw +%}\nc|"
+ },
+ {
+  "name": "raw-endraw-minus-left-plus-right",
+  "template": "{% raw %}b  {%- endraw +%}\nc|"
+ },
+ {
+  "name": "raw-endraw-plus-left-minus-right",
+  "template": "{% raw %}b  \n  {%+ endraw -%}\n  c|"
+ },
+ {
+  "name": "raw-spaces-in-tags",
+  "template": "{%   raw   %}b{%   endraw   %}|"
+ },
+ {
+  "name": "raw-tight-minus",
+  "template": "a  {%-raw-%}  b  {%-endraw-%}  c|"
+ },
+ {
+  "name": "raw-newlines-in-tags",
+  "template": "{%\nraw\n%}\nb{%\nendraw\n%}\nc|"
+ },
+ {
+  "name": "raw-newline-before-minus",
+  "template": "{%-\nraw\n-%}\n b\n {%-\nendraw\n-%}\n c|"
+ },
+ {
+  "name": "raw-trim-after-end-not-begin",
+  "template": "{% raw %}\nb\n{% endraw %}\nc|"
+ },
+ {
+  "name": "raw-minus-open-keeps-left-newline-right",
+  "template": "{%- raw %}\nb{% endraw %}|"
+ },
+ {
+  "name": "raw-indented-all",
+  "template": "a\n  {% raw %}\n  b\n  {% endraw %}\n  c|"
+ },
+ {
+  "name": "raw-ws-only-same-line",
+  "template": "{% raw %}  {% endraw %}|"
+ },
+ {
+  "name": "raw-ws-only-after-newline",
+  "template": "{% raw %}\n  {% endraw %}|"
+ },
+ {
+  "name": "raw-ws-only-after-minus",
+  "template": "{% raw -%}\n  {% endraw %}|"
+ },
+ {
+  "name": "raw-ws-only-plus-end",
+  "template": "{% raw %}\n\t{%+ endraw %}|"
+ },
+ {
+  "name": "raw-empty",
+  "template": "{% raw %}{% endraw %}|"
+ },
+ {
+  "name": "raw-lstrip-end-tab-mix",
+  "template": "{% raw %}a\n\t {% endraw %}\nb|"
+ },
+ {
+  "name": "raw-tags-kept",
+  "template": "{% raw %}{{- x -}} {%- if yes -%} {#- c -#}  {% endraw %}|"
+ },
+ {
+  "name": "raw-signs-kept-newlines",
+  "template": "{% raw %}\n  {%- if yes -%}\n  {{ x }}\n  {%+ endif +%}\n{% endraw %}|"
+ },
+ {
+  "name": "raw-open-delims-and-quotes-kept",
+  "template": "{% raw %}{{ {% if {# \"it's\" 'q {% endraw %}|"
+ },
+ {
+  "name": "raw-near-endraw-many",
+  "template": "{% raw %}{% endraw x %} {% endrawx %} {% end raw %} {% ENDRAW %} {% endraw - %} {%-+ endraw %} {% endraw -+%} {%% endraw %} {{ endraw }}{% endraw %}|"
+ },
+ {
+  "name": "raw-near-endraw-unclosed",
+  "template": "{% raw %}{% endraw {% endraw %}|"
+ },
+ {
+  "name": "raw-raw-in-raw",
+  "template": "{% raw %}{% raw %}{% endraw %}|"
+ },
+ {
+  "name": "raw-raw-in-raw-double-end-illegal",
+  "template": "{% raw %}{% raw %}{% endraw %}{% endraw %}|"
+ },
+ {
+  "name": "raw-unterminated",
+  "template": "{% raw %}abc"
+ },
+ {
+  "name": "raw-unterminated-end-tag",
+  "template": "{% raw %}abc{% endraw"
+ },
+ {
+  "name": "raw-eof-bare",
+  "template": "a{% raw %}"
+ },
+ {
+  "name": "raw-eof-two-newlines",
+  "template": "a{% raw %}\n\n"
+ },
+ {
+  "name": "raw-eof-space",
+  "template": "a{% raw %} "
+ },
+ {
+  "name": "raw-eof-minus-swallows",
+  "template": "a{% raw -%}\n  "
+ },
+ {
+  "name": "raw-after-tag-minus",
+  "template": "{{ x -}}  {% raw %}  b{% endraw %}|"
+ },
+ {
+  "name": "raw-before-tag-minus-spaced",
+  "template": "{% raw %}b  {% endraw %}  {{- x }}|"
+ },
+ {
+  "name": "raw-before-tag-minus-tight",
+  "template": "{% raw %}b  {% endraw %}{{- x }}|"
+ },
+ {
+  "name": "raw-two-spaced",
+  "template": "{% raw %}a  {% endraw %}  {% raw %}  b{% endraw %}|"
+ },
+ {
+  "name": "raw-in-if",
+  "template": "{% if yes %}\n{% raw %}\nb\n{% endraw %}\n{% endif %}\nc|"
+ },
+ {
+  "name": "raw-in-if-minus",
+  "template": "{% if yes -%}\n  {% raw %}b  {% endraw %}\n{%- endif %}|"
+ },
+ {
+  "name": "raw-in-for",
+  "template": "{% for i in items %}\n{% raw %}\n{{ i }}\n{% endraw %}\n{% endfor %}|"
+ },
+ {
+  "name": "raw-ends-before-comment",
+  "template": "{% raw %}{# {% endraw %} #}|"
+ },
+ {
+  "name": "raw-crlf",
+  "template": "{% raw %}\r\nb\r\n{% endraw %}\r\nc|"
+ },
+ {
+  "name": "raw-cr",
+  "template": "{% raw %}\rb\r{% endraw %}\rc|"
+ },
+ {
+  "name": "eof-newline-alone",
+  "template": "\n"
+ },
+ {
+  "name": "eof-two-newlines-alone",
+  "template": "\n\n"
+ },
+ {
+  "name": "eof-crlf-alone",
+  "template": "\r\n"
+ },
+ {
+  "name": "eof-lf-cr-alone",
+  "template": "\n\r"
+ },
+ {
+  "name": "eof-two-crlf-alone",
+  "template": "\r\n\r\n"
+ },
+ {
+  "name": "eof-text-two",
+  "template": "a\n\n"
+ },
+ {
+  "name": "eof-text-crlf-lf",
+  "template": "a\r\n\n"
+ },
+ {
+  "name": "eof-text-cr",
+  "template": "a\r"
+ },
+ {
+  "name": "eof-var-two",
+  "template": "{{ x }}\n\n"
+ },
+ {
+  "name": "eof-var-crlf",
+  "template": "{{ x }}\r\n"
+ },
+ {
+  "name": "eof-block-two",
+  "template": "{% if yes %}a{% endif %}\n\n"
+ },
+ {
+  "name": "eof-block-crlf-two",
+  "template": "{% if yes %}a{% endif %}\r\n\r\n"
+ },
+ {
+  "name": "eof-block-minus-two",
+  "template": "{% if yes %}a{% endif -%}\n\n"
+ },
+ {
+  "name": "eof-block-plus-two",
+  "template": "{% if yes %}a{% endif +%}\n\n"
+ },
+ {
+  "name": "eof-cmt-two",
+  "template": "{# c #}\n\n"
+ },
+ {
+  "name": "eof-cmt-plus-two",
+  "template": "{# c +#}\n\n"
+ },
+ {
+  "name": "eof-raw-two",
+  "template": "{% raw %}a{% endraw %}\n\n"
+ },
+ {
+  "name": "eof-raw-plus-two",
+  "template": "{% raw %}a{% endraw +%}\n\n"
+ },
+ {
+  "name": "eof-in-raw-not-removed",
+  "template": "{% raw %}a\n{% endraw %}"
+ },
+ {
+  "name": "eof-then-ws-line",
+  "template": "{% if yes %}a{% endif %}\n  \n"
+ },
+ {
+  "name": "eof-ls-not-newline",
+  "template": "a\u2028\n"
+ },
+ {
+  "name": "eof-output-newline-kept",
+  "template": "{{ \"a\\n\" }}"
+ },
+ {
+  "name": "ws-0009",
+  "template": "\t{% if yes %}a{% endif %}\n\t{# c #}b\n\t{% if yes %}c{% endif %}\t{% if yes %}d{% endif %}\ne\t {% if yes %}f{% endif %}\n\t{{ x }}\n{% raw %}\n\t{% endraw %}\t|\na\t{%- if yes -%}\tb\t{{- x -}}\tc\t{#- c -#}\td\t{%- endif -%}\te\t{%- raw -%}\tf\t{%- endraw -%}\tg|"
+ },
+ {
+  "name": "ws-000a",
+  "template": "\n{% if yes %}a{% endif %}\n\n{# c #}b\n\n{% if yes %}c{% endif %}\n{% if yes %}d{% endif %}\ne\n {% if yes %}f{% endif %}\n\n{{ x }}\n{% raw %}\n\n{% endraw %}\n|\na\n{%- if yes -%}\nb\n{{- x -}}\nc\n{#- c -#}\nd\n{%- endif -%}\ne\n{%- raw -%}\nf\n{%- endraw -%}\ng|"
+ },
+ {
+  "name": "ws-000b",
+  "template": "\u000b{% if yes %}a{% endif %}\n\u000b{# c #}b\n\u000b{% if yes %}c{% endif %}\u000b{% if yes %}d{% endif %}\ne\u000b {% if yes %}f{% endif %}\n\u000b{{ x }}\n{% raw %}\n\u000b{% endraw %}\u000b|\na\u000b{%- if yes -%}\u000bb\u000b{{- x -}}\u000bc\u000b{#- c -#}\u000bd\u000b{%- endif -%}\u000be\u000b{%- raw -%}\u000bf\u000b{%- endraw -%}\u000bg|"
+ },
+ {
+  "name": "ws-000c",
+  "template": "\f{% if yes %}a{% endif %}\n\f{# c #}b\n\f{% if yes %}c{% endif %}\f{% if yes %}d{% endif %}\ne\f {% if yes %}f{% endif %}\n\f{{ x }}\n{% raw %}\n\f{% endraw %}\f|\na\f{%- if yes -%}\fb\f{{- x -}}\fc\f{#- c -#}\fd\f{%- endif -%}\fe\f{%- raw -%}\ff\f{%- endraw -%}\fg|"
+ },
+ {
+  "name": "ws-000d",
+  "template": "\r{% if yes %}a{% endif %}\n\r{# c #}b\n\r{% if yes %}c{% endif %}\r{% if yes %}d{% endif %}\ne\r {% if yes %}f{% endif %}\n\r{{ x }}\n{% raw %}\n\r{% endraw %}\r|\na\r{%- if yes -%}\rb\r{{- x -}}\rc\r{#- c -#}\rd\r{%- endif -%}\re\r{%- raw -%}\rf\r{%- endraw -%}\rg|"
+ },
+ {
+  "name": "ws-001c",
+  "template": "\u001c{% if yes %}a{% endif %}\n\u001c{# c #}b\n\u001c{% if yes %}c{% endif %}\u001c{% if yes %}d{% endif %}\ne\u001c {% if yes %}f{% endif %}\n\u001c{{ x }}\n{% raw %}\n\u001c{% endraw %}\u001c|\na\u001c{%- if yes -%}\u001cb\u001c{{- x -}}\u001cc\u001c{#- c -#}\u001cd\u001c{%- endif -%}\u001ce\u001c{%- raw -%}\u001cf\u001c{%- endraw -%}\u001cg|"
+ },
+ {
+  "name": "ws-001d",
+  "template": "\u001d{% if yes %}a{% endif %}\n\u001d{# c #}b\n\u001d{% if yes %}c{% endif %}\u001d{% if yes %}d{% endif %}\ne\u001d {% if yes %}f{% endif %}\n\u001d{{ x }}\n{% raw %}\n\u001d{% endraw %}\u001d|\na\u001d{%- if yes -%}\u001db\u001d{{- x -}}\u001dc\u001d{#- c -#}\u001dd\u001d{%- endif -%}\u001de\u001d{%- raw -%}\u001df\u001d{%- endraw -%}\u001dg|"
+ },
+ {
+  "name": "ws-001e",
+  "template": "\u001e{% if yes %}a{% endif %}\n\u001e{# c #}b\n\u001e{% if yes %}c{% endif %}\u001e{% if yes %}d{% endif %}\ne\u001e {% if yes %}f{% endif %}\n\u001e{{ x }}\n{% raw %}\n\u001e{% endraw %}\u001e|\na\u001e{%- if yes -%}\u001eb\u001e{{- x -}}\u001ec\u001e{#- c -#}\u001ed\u001e{%- endif -%}\u001ee\u001e{%- raw -%}\u001ef\u001e{%- endraw -%}\u001eg|"
+ },
+ {
+  "name": "ws-001f",
+  "template": "\u001f{% if yes %}a{% endif %}\n\u001f{# c #}b\n\u001f{% if yes %}c{% endif %}\u001f{% if yes %}d{% endif %}\ne\u001f {% if yes %}f{% endif %}\n\u001f{{ x }}\n{% raw %}\n\u001f{% endraw %}\u001f|\na\u001f{%- if yes -%}\u001fb\u001f{{- x -}}\u001fc\u001f{#- c -#}\u001fd\u001f{%- endif -%}\u001fe\u001f{%- raw -%}\u001ff\u001f{%- endraw -%}\u001fg|"
+ },
+ {
+  "name": "ws-0020",
+  "template": " {% if yes %}a{% endif %}\n {# c #}b\n {% if yes %}c{% endif %} {% if yes %}d{% endif %}\ne  {% if yes %}f{% endif %}\n {{ x }}\n{% raw %}\n {% endraw %} |\na {%- if yes -%} b {{- x -}} c {#- c -#} d {%- endif -%} e {%- raw -%} f {%- endraw -%} g|"
+ },
+ {
+  "name": "ws-0085",
+  "template": "\u0085{% if yes %}a{% endif %}\n\u0085{# c #}b\n\u0085{% if yes %}c{% endif %}\u0085{% if yes %}d{% endif %}\ne\u0085 {% if yes %}f{% endif %}\n\u0085{{ x }}\n{% raw %}\n\u0085{% endraw %}\u0085|\na\u0085{%- if yes -%}\u0085b\u0085{{- x -}}\u0085c\u0085{#- c -#}\u0085d\u0085{%- endif -%}\u0085e\u0085{%- raw -%}\u0085f\u0085{%- endraw -%}\u0085g|"
+ },
+ {
+  "name": "ws-00a0",
+  "template": "\u00a0{% if yes %}a{% endif %}\n\u00a0{# c #}b\n\u00a0{% if yes %}c{% endif %}\u00a0{% if yes %}d{% endif %}\ne\u00a0 {% if yes %}f{% endif %}\n\u00a0{{ x }}\n{% raw %}\n\u00a0{% endraw %}\u00a0|\na\u00a0{%- if yes -%}\u00a0b\u00a0{{- x -}}\u00a0c\u00a0{#- c -#}\u00a0d\u00a0{%- endif -%}\u00a0e\u00a0{%- raw -%}\u00a0f\u00a0{%- endraw -%}\u00a0g|"
+ },
+ {
+  "name": "ws-1680",
+  "template": "\u1680{% if yes %}a{% endif %}\n\u1680{# c #}b\n\u1680{% if yes %}c{% endif %}\u1680{% if yes %}d{% endif %}\ne\u1680 {% if yes %}f{% endif %}\n\u1680{{ x }}\n{% raw %}\n\u1680{% endraw %}\u1680|\na\u1680{%- if yes -%}\u1680b\u1680{{- x -}}\u1680c\u1680{#- c -#}\u1680d\u1680{%- endif -%}\u1680e\u1680{%- raw -%}\u1680f\u1680{%- endraw -%}\u1680g|"
+ },
+ {
+  "name": "ws-2000",
+  "template": "\u2000{% if yes %}a{% endif %}\n\u2000{# c #}b\n\u2000{% if yes %}c{% endif %}\u2000{% if yes %}d{% endif %}\ne\u2000 {% if yes %}f{% endif %}\n\u2000{{ x }}\n{% raw %}\n\u2000{% endraw %}\u2000|\na\u2000{%- if yes -%}\u2000b\u2000{{- x -}}\u2000c\u2000{#- c -#}\u2000d\u2000{%- endif -%}\u2000e\u2000{%- raw -%}\u2000f\u2000{%- endraw -%}\u2000g|"
+ },
+ {
+  "name": "ws-2001",
+  "template": "\u2001{% if yes %}a{% endif %}\n\u2001{# c #}b\n\u2001{% if yes %}c{% endif %}\u2001{% if yes %}d{% endif %}\ne\u2001 {% if yes %}f{% endif %}\n\u2001{{ x }}\n{% raw %}\n\u2001{% endraw %}\u2001|\na\u2001{%- if yes -%}\u2001b\u2001{{- x -}}\u2001c\u2001{#- c -#}\u2001d\u2001{%- endif -%}\u2001e\u2001{%- raw -%}\u2001f\u2001{%- endraw -%}\u2001g|"
+ },
+ {
+  "name": "ws-2002",
+  "template": "\u2002{% if yes %}a{% endif %}\n\u2002{# c #}b\n\u2002{% if yes %}c{% endif %}\u2002{% if yes %}d{% endif %}\ne\u2002 {% if yes %}f{% endif %}\n\u2002{{ x }}\n{% raw %}\n\u2002{% endraw %}\u2002|\na\u2002{%- if yes -%}\u2002b\u2002{{- x -}}\u2002c\u2002{#- c -#}\u2002d\u2002{%- endif -%}\u2002e\u2002{%- raw -%}\u2002f\u2002{%- endraw -%}\u2002g|"
+ },
+ {
+  "name": "ws-2003",
+  "template": "\u2003{% if yes %}a{% endif %}\n\u2003{# c #}b\n\u2003{% if yes %}c{% endif %}\u2003{% if yes %}d{% endif %}\ne\u2003 {% if yes %}f{% endif %}\n\u2003{{ x }}\n{% raw %}\n\u2003{% endraw %}\u2003|\na\u2003{%- if yes -%}\u2003b\u2003{{- x -}}\u2003c\u2003{#- c -#}\u2003d\u2003{%- endif -%}\u2003e\u2003{%- raw -%}\u2003f\u2003{%- endraw -%}\u2003g|"
+ },
+ {
+  "name": "ws-2004",
+  "template": "\u2004{% if yes %}a{% endif %}\n\u2004{# c #}b\n\u2004{% if yes %}c{% endif %}\u2004{% if yes %}d{% endif %}\ne\u2004 {% if yes %}f{% endif %}\n\u2004{{ x }}\n{% raw %}\n\u2004{% endraw %}\u2004|\na\u2004{%- if yes -%}\u2004b\u2004{{- x -}}\u2004c\u2004{#- c -#}\u2004d\u2004{%- endif -%}\u2004e\u2004{%- raw -%}\u2004f\u2004{%- endraw -%}\u2004g|"
+ },
+ {
+  "name": "ws-2005",
+  "template": "\u2005{% if yes %}a{% endif %}\n\u2005{# c #}b\n\u2005{% if yes %}c{% endif %}\u2005{% if yes %}d{% endif %}\ne\u2005 {% if yes %}f{% endif %}\n\u2005{{ x }}\n{% raw %}\n\u2005{% endraw %}\u2005|\na\u2005{%- if yes -%}\u2005b\u2005{{- x -}}\u2005c\u2005{#- c -#}\u2005d\u2005{%- endif -%}\u2005e\u2005{%- raw -%}\u2005f\u2005{%- endraw -%}\u2005g|"
+ },
+ {
+  "name": "ws-2006",
+  "template": "\u2006{% if yes %}a{% endif %}\n\u2006{# c #}b\n\u2006{% if yes %}c{% endif %}\u2006{% if yes %}d{% endif %}\ne\u2006 {% if yes %}f{% endif %}\n\u2006{{ x }}\n{% raw %}\n\u2006{% endraw %}\u2006|\na\u2006{%- if yes -%}\u2006b\u2006{{- x -}}\u2006c\u2006{#- c -#}\u2006d\u2006{%- endif -%}\u2006e\u2006{%- raw -%}\u2006f\u2006{%- endraw -%}\u2006g|"
+ },
+ {
+  "name": "ws-2007",
+  "template": "\u2007{% if yes %}a{% endif %}\n\u2007{# c #}b\n\u2007{% if yes %}c{% endif %}\u2007{% if yes %}d{% endif %}\ne\u2007 {% if yes %}f{% endif %}\n\u2007{{ x }}\n{% raw %}\n\u2007{% endraw %}\u2007|\na\u2007{%- if yes -%}\u2007b\u2007{{- x -}}\u2007c\u2007{#- c -#}\u2007d\u2007{%- endif -%}\u2007e\u2007{%- raw -%}\u2007f\u2007{%- endraw -%}\u2007g|"
+ },
+ {
+  "name": "ws-2008",
+  "template": "\u2008{% if yes %}a{% endif %}\n\u2008{# c #}b\n\u2008{% if yes %}c{% endif %}\u2008{% if yes %}d{% endif %}\ne\u2008 {% if yes %}f{% endif %}\n\u2008{{ x }}\n{% raw %}\n\u2008{% endraw %}\u2008|\na\u2008{%- if yes -%}\u2008b\u2008{{- x -}}\u2008c\u2008{#- c -#}\u2008d\u2008{%- endif -%}\u2008e\u2008{%- raw -%}\u2008f\u2008{%- endraw -%}\u2008g|"
+ },
+ {
+  "name": "ws-2009",
+  "template": "\u2009{% if yes %}a{% endif %}\n\u2009{# c #}b\n\u2009{% if yes %}c{% endif %}\u2009{% if yes %}d{% endif %}\ne\u2009 {% if yes %}f{% endif %}\n\u2009{{ x }}\n{% raw %}\n\u2009{% endraw %}\u2009|\na\u2009{%- if yes -%}\u2009b\u2009{{- x -}}\u2009c\u2009{#- c -#}\u2009d\u2009{%- endif -%}\u2009e\u2009{%- raw -%}\u2009f\u2009{%- endraw -%}\u2009g|"
+ },
+ {
+  "name": "ws-200a",
+  "template": "\u200a{% if yes %}a{% endif %}\n\u200a{# c #}b\n\u200a{% if yes %}c{% endif %}\u200a{% if yes %}d{% endif %}\ne\u200a {% if yes %}f{% endif %}\n\u200a{{ x }}\n{% raw %}\n\u200a{% endraw %}\u200a|\na\u200a{%- if yes -%}\u200ab\u200a{{- x -}}\u200ac\u200a{#- c -#}\u200ad\u200a{%- endif -%}\u200ae\u200a{%- raw -%}\u200af\u200a{%- endraw -%}\u200ag|"
+ },
+ {
+  "name": "ws-2028",
+  "template": "\u2028{% if yes %}a{% endif %}\n\u2028{# c #}b\n\u2028{% if yes %}c{% endif %}\u2028{% if yes %}d{% endif %}\ne\u2028 {% if yes %}f{% endif %}\n\u2028{{ x }}\n{% raw %}\n\u2028{% endraw %}\u2028|\na\u2028{%- if yes -%}\u2028b\u2028{{- x -}}\u2028c\u2028{#- c -#}\u2028d\u2028{%- endif -%}\u2028e\u2028{%- raw -%}\u2028f\u2028{%- endraw -%}\u2028g|"
+ },
+ {
+  "name": "ws-2029",
+  "template": "\u2029{% if yes %}a{% endif %}\n\u2029{# c #}b\n\u2029{% if yes %}c{% endif %}\u2029{% if yes %}d{% endif %}\ne\u2029 {% if yes %}f{% endif %}\n\u2029{{ x }}\n{% raw %}\n\u2029{% endraw %}\u2029|\na\u2029{%- if yes -%}\u2029b\u2029{{- x -}}\u2029c\u2029{#- c -#}\u2029d\u2029{%- endif -%}\u2029e\u2029{%- raw -%}\u2029f\u2029{%- endraw -%}\u2029g|"
+ },
+ {
+  "name": "ws-202f",
+  "template": "\u202f{% if yes %}a{% endif %}\n\u202f{# c #}b\n\u202f{% if yes %}c{% endif %}\u202f{% if yes %}d{% endif %}\ne\u202f {% if yes %}f{% endif %}\n\u202f{{ x }}\n{% raw %}\n\u202f{% endraw %}\u202f|\na\u202f{%- if yes -%}\u202fb\u202f{{- x -}}\u202fc\u202f{#- c -#}\u202fd\u202f{%- endif -%}\u202fe\u202f{%- raw -%}\u202ff\u202f{%- endraw -%}\u202fg|"
+ },
+ {
+  "name": "ws-205f",
+  "template": "\u205f{% if yes %}a{% endif %}\n\u205f{# c #}b\n\u205f{% if yes %}c{% endif %}\u205f{% if yes %}d{% endif %}\ne\u205f {% if yes %}f{% endif %}\n\u205f{{ x }}\n{% raw %}\n\u205f{% endraw %}\u205f|\na\u205f{%- if yes -%}\u205fb\u205f{{- x -}}\u205fc\u205f{#- c -#}\u205fd\u205f{%- endif -%}\u205fe\u205f{%- raw -%}\u205ff\u205f{%- endraw -%}\u205fg|"
+ },
+ {
+  "name": "ws-3000",
+  "template": "\u3000{% if yes %}a{% endif %}\n\u3000{# c #}b\n\u3000{% if yes %}c{% endif %}\u3000{% if yes %}d{% endif %}\ne\u3000 {% if yes %}f{% endif %}\n\u3000{{ x }}\n{% raw %}\n\u3000{% endraw %}\u3000|\na\u3000{%- if yes -%}\u3000b\u3000{{- x -}}\u3000c\u3000{#- c -#}\u3000d\u3000{%- endif -%}\u3000e\u3000{%- raw -%}\u3000f\u3000{%- endraw -%}\u3000g|"
+ },
+ {
+  "name": "wsrun-all-rstrip",
+  "template": "a\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000{%- if yes %}b{% endif %}|"
+ },
+ {
+  "name": "wsrun-all-after-minus",
+  "template": "{{ x -}}\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000b|"
+ },
+ {
+  "name": "wsrun-in-var",
+  "template": "{{\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000x\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000}}|"
+ },
+ {
+  "name": "wsrun-in-block",
+  "template": "{%\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000if\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000yes\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000%}a{%\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000endif\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000%}|"
+ },
+ {
+  "name": "wsrun-in-raw-tags-minus",
+  "template": "a {%-\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000raw\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000-%} b {%-\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000endraw\t\n\u000b\f\r\u001c\u001d\u001e\u001f \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000-%} c|"
+ },
+ {
+  "name": "ws-001c-in-tags",
+  "template": "{{\u001cx\u001c}}{%\u001cif\u001cyes\u001c%}{%\u001craw\u001c%}a{%\u001cendraw\u001c%}{%\u001cendif\u001c%}|"
+ },
+ {
+  "name": "ws-0085-in-tags",
+  "template": "{{\u0085x\u0085}}{%\u0085if\u0085yes\u0085%}{%\u0085raw\u0085%}a{%\u0085endraw\u0085%}{%\u0085endif\u0085%}|"
+ },
+ {
+  "name": "near-200b",
+  "template": "\u200b  {% if yes %}a{% endif %}\n  \u200b{% if yes %}b{% endif %}\n\u200b  {% if yes %}c{% endif %}\na \u200b {%- if yes -%} \u200b b \u200b {{- x -}} \u200b c \u200b {#- c -#} \u200b d{% endif %}|"
+ },
+ {
+  "name": "near-feff",
+  "template": "\ufeff  {% if yes %}a{% endif %}\n  \ufeff{% if yes %}b{% endif %}\n\ufeff  {% if yes %}c{% endif %}\na \ufeff {%- if yes -%} \ufeff b \ufeff {{- x -}} \ufeff c \ufeff {#- c -#} \ufeff d{% endif %}|"
+ },
+ {
+  "name": "near-180e",
+  "template": "\u180e  {% if yes %}a{% endif %}\n  \u180e{% if yes %}b{% endif %}\n\u180e  {% if yes %}c{% endif %}\na \u180e {%- if yes -%} \u180e b \u180e {{- x -}} \u180e c \u180e {#- c -#} \u180e d{% endif %}|"
+ },
+ {
+  "name": "near-2060",
+  "template": "\u2060  {% if yes %}a{% endif %}\n  \u2060{% if yes %}b{% endif %}\n\u2060  {% if yes %}c{% endif %}\na \u2060 {%- if yes -%} \u2060 b \u2060 {{- x -}} \u2060 c \u2060 {#- c -#} \u2060 d{% endif %}|"
+ },
+ {
+  "name": "near-200b-in-var",
+  "template": "{{\u200bx}}"
+ },
+ {
+  "name": "near-feff-in-raw-tag",
+  "template": "{% raw\ufeff%}a{% endraw %}"
+ },
+ {
+  "name": "nearrun-rstrip",
+  "template": "a\b\u000e\u001b\u0084\u0086\u009f\u00a1\u167f\u1681\u1fff\u2027\u202a\u202e\u2030\u205e\u2fff\u3001{%- if yes %}b{% endif %}|"
+ },
+ {
+  "name": "nearrun-after-minus",
+  "template": "{{ x -}}\b\u000e\u001b\u0084\u0086\u009f\u00a1\u167f\u1681\u1fff\u2027\u202a\u202e\u2030\u205e\u2fff\u3001b|"
+ },
+ {
+  "name": "nearrun-lstrip",
+  "template": "a\n\b\u000e\u001b\u0084\u0086\u009f\u00a1\u167f\u1681\u1fff\u2027\u202a\u202e\u2030\u205e\u2fff\u3001{% if yes %}b{% endif %}|"
+ }
+]

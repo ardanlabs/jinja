@@ -1010,163 +1010,12 @@ func (p *exprParser) parseCallArgs() ([]expr, []kwarg, error) {
 // =============================================================================
 
 func parseTemplate(segs []segment) ([]node, error) {
-	// Apply whitespace trimming to segments before parsing.
-	applyTrimming(segs)
-
 	p := &templateParser{segs: segs, pos: 0}
-	nodes, err := p.parseUntil("")
+	nodes, err := p.parseUntil()
 	if err != nil {
 		return nil, err
 	}
 	return nodes, nil
-}
-
-// applyTrimming modifies text segments in place based on trim flags from
-// neighboring tags. This must happen before parsing so text nodes get the
-// correct content.
-//
-// Two layers of rules apply:
-//
-//  1. Explicit trim markers ({%- ... -%} / {{- ... -}} / {#- ... -#}) strip
-//     ALL whitespace (including newlines) on the marked side of the tag.
-//
-//  2. The lstrip_blocks=True / trim_blocks=True defaults that HuggingFace's
-//     `transformers.apply_chat_template` uses (matching Jinja2's chat-template
-//     conventions). These apply only to block tags ({% ... %}), never to
-//     expressions or comments, and only when the explicit "-" marker isn't
-//     present on that side:
-//
-//     - lstrip_blocks: strip spaces and tabs (not newlines) from the start of
-//       the line up to the tag.
-//     - trim_blocks: strip a single newline immediately after the tag.
-//
-// Without these defaults, every block tag in a real chat template would
-// emit a leading or trailing newline that the canonical Python engine
-// suppresses, producing prompts that don't tokenize the same way.
-func applyTrimming(segs []segment) {
-	// Two passes are required because lstrip_blocks and trim_blocks
-	// interact: when one tag's trim_blocks would consume the "\n" that
-	// the next tag's lstrip_blocks needs in order to detect "this is
-	// just indentation", processing them in source order causes the
-	// indentation to leak into the rendered output.
-	//
-	// Python jinja2 sidesteps this at the lexer level by stripping the
-	// leading whitespace before stripping the trailing newline. We get
-	// the same effect by handling every tag's LEFT side first, then
-	// every tag's RIGHT side.
-
-	// Pass 1: left side of every tag.
-	for i := range segs {
-		seg := &segs[i]
-		applyDefaults := seg.kind == segStmt || seg.kind == segComment
-
-		switch {
-		case seg.trimLeft:
-			for j := i - 1; j >= 0; j-- {
-				if segs[j].kind == segText {
-					segs[j].text = trimTrailingWhitespace(segs[j].text)
-					break
-				}
-			}
-		case applyDefaults:
-			// lstrip_blocks strips indentation between the previous
-			// newline and this block tag — but only the whitespace
-			// *immediately* before the tag. If the tag is not directly
-			// preceded by text (e.g. `{{ x }}{% endfor %}`), there is no
-			// such indentation and nothing to strip; searching past the
-			// intervening expression/tag would wrongly strip whitespace
-			// that belongs before that other segment.
-			if j := i - 1; j >= 0 && segs[j].kind == segText {
-				// atLineStart only matters when the adjacent text is
-				// pure indentation with no newline of its own (see
-				// lstripBlock). Because the scanner never emits two
-				// adjacent text segments, such a segment is at the
-				// start of a line iff it is the very first segment in
-				// the template (start of file == start of line): any
-				// preceding segment is a non-text tag/expression on the
-				// same line, which makes this block tag mid-line, so its
-				// indentation is significant and must not be stripped.
-				// This is why `   {% if %}...` at the top of a template
-				// strips its indentation but `{{ x }} {% endfor %}` does
-				// not (matching reference Jinja2).
-				atLineStart := j == 0
-				segs[j].text = lstripBlock(segs[j].text, atLineStart)
-			}
-		}
-	}
-
-	// Pass 2: right side of every tag.
-	for i := range segs {
-		seg := &segs[i]
-		applyDefaults := seg.kind == segStmt || seg.kind == segComment
-
-		switch {
-		case seg.trimRight:
-			for j := i + 1; j < len(segs); j++ {
-				if segs[j].kind == segText {
-					segs[j].text = trimLeadingWhitespace(segs[j].text)
-					break
-				}
-			}
-		case applyDefaults:
-			// trim_blocks removes a single newline *immediately* after
-			// the block tag's `%}`. If the tag is not directly followed
-			// by text (e.g. `{% for %}{{ x }}`), no newline follows it,
-			// so nothing is trimmed; searching past the intervening
-			// expression/tag would wrongly consume a newline that is
-			// loop-body content, not the one after the tag (#1800).
-			if i+1 < len(segs) && segs[i+1].kind == segText {
-				segs[i+1].text = trimBlockNewline(segs[i+1].text)
-			}
-		}
-	}
-}
-
-// lstripBlock removes spaces and tabs from the end of s back to (and not
-// past) the previous newline. Implements Jinja2's lstrip_blocks=True default:
-// the run of indentation between a newline and a block tag is stripped only
-// if the tag is the first non-whitespace thing on its line.
-//
-// If atTemplateStart is true the segment is treated as being preceded by a
-// newline (start of file counts as start of line). Otherwise, exhausting the
-// segment without seeing a newline means we're somewhere mid-line and must
-// leave the whitespace intact — a run of spaces between two tags on the same
-// line (e.g. `{{ item }} {% endfor %}`) is significant output.
-func lstripBlock(s string, atTemplateStart bool) string {
-	end := len(s)
-	for end > 0 {
-		c := s[end-1]
-		if c == ' ' || c == '\t' {
-			end--
-			continue
-		}
-		break
-	}
-	if end == len(s) {
-		return s // no whitespace to strip
-	}
-	if end == 0 {
-		if atTemplateStart {
-			return ""
-		}
-		return s
-	}
-	if s[end-1] == '\n' {
-		return s[:end]
-	}
-	return s
-}
-
-// trimBlockNewline removes exactly one leading "\n" (or "\r\n") from s.
-// Implements Jinja2's trim_blocks=True default.
-func trimBlockNewline(s string) string {
-	switch {
-	case strings.HasPrefix(s, "\r\n"):
-		return s[2:]
-	case strings.HasPrefix(s, "\n"):
-		return s[1:]
-	}
-	return s
 }
 
 type templateParser struct {
@@ -1214,7 +1063,7 @@ func (p *templateParser) parseUntil(stopKeywords ...string) ([]node, error) {
 
 		case segComment:
 			p.advance()
-			// Comments produce no output but may affect whitespace.
+			// Comments produce no output.
 
 		case segExpr:
 			p.advance()
@@ -1264,13 +1113,6 @@ func (p *templateParser) parseUntil(stopKeywords ...string) ([]node, error) {
 
 			case "filter":
 				n, err := p.parseFilterBlock()
-				if err != nil {
-					return nil, err
-				}
-				nodes = append(nodes, n)
-
-			case "raw":
-				n, err := p.parseRaw()
 				if err != nil {
 					return nil, err
 				}
@@ -1604,39 +1446,6 @@ func (p *templateParser) parseFilterBlock() (*filterBlockNode, error) {
 	return &filterBlockNode{filter: fe, body: body}, nil
 }
 
-func (p *templateParser) parseRaw() (*textNode, error) {
-	p.advance() // consume "raw" statement
-
-	var raw strings.Builder
-	for !p.done() {
-		seg := p.peek()
-		if seg.kind == segStmt && stmtKeyword(seg.text) == "endraw" {
-			p.advance()
-			return &textNode{text: raw.String()}, nil
-		}
-		p.advance()
-		// Reconstruct original text including delimiters for non-text segments.
-		switch seg.kind {
-		case segText:
-			raw.WriteString(seg.text)
-		case segExpr:
-			raw.WriteString("{{")
-			raw.WriteString(seg.text)
-			raw.WriteString("}}")
-		case segStmt:
-			raw.WriteString("{%")
-			raw.WriteString(seg.text)
-			raw.WriteString("%}")
-		case segComment:
-			raw.WriteString("{#")
-			raw.WriteString(seg.text)
-			raw.WriteString("#}")
-		}
-	}
-
-	return nil, fmt.Errorf("unclosed raw block")
-}
-
 // =============================================================================
 // Helper functions
 // =============================================================================
@@ -1725,26 +1534,4 @@ func splitVars(s string) []string {
 		}
 	}
 	return vars
-}
-
-// trimLeadingWhitespace strips all leading whitespace (spaces, tabs, and
-// newlines) from the text. Per the Jinja spec, the "-" trim flag removes
-// all whitespace on that side.
-func trimLeadingWhitespace(s string) string {
-	i := 0
-	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
-		i++
-	}
-	return s[i:]
-}
-
-// trimTrailingWhitespace strips all trailing whitespace (spaces, tabs, and
-// newlines) from the text. Per the Jinja spec, the "-" trim flag removes
-// all whitespace on that side.
-func trimTrailingWhitespace(s string) string {
-	i := len(s)
-	for i > 0 && (s[i-1] == ' ' || s[i-1] == '\t' || s[i-1] == '\n' || s[i-1] == '\r') {
-		i--
-	}
-	return s[:i]
 }

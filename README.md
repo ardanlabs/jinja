@@ -137,7 +137,7 @@ See the [examples](examples/) directory for more, including tool calling.
 
 - Variable output: `{{ expr }}`
 - Statements: `{% if %}`, `{% for %}`, `{% set %}`, `{% macro %}`, `{% block %}`
-- Whitespace control: `{%- ... -%}`, `{{- ... -}}`
+- Whitespace control, matching Jinja2 with `trim_blocks` and `lstrip_blocks` on (the settings HuggingFace uses for chat templates): `{%- ... -%}`, `{{- ... -}}`, `{#- ... -#}`, `{%+ ... +%}`, `{#+ ... +#}`
 - Comments: `{# ... #}`
 - String concatenation with `~`
 - Inline if expressions: `{{ x if condition else y }}`

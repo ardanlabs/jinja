@@ -1,0 +1,12 @@
+[gMASK]<sop><|system|>Reasoning Effort: Max<|system|>
+# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{"description": "Get the current weather for a location.", "name": "get_weather", "parameters": {"properties": {"location": {"type": "string"}}, "required": ["location"], "type": "object"}}
+</tools>
+
+For each function call, output the function name and arguments within the following XML format:
+<tool_call>{function-name}<arg_key>{arg-key-1}</arg_key><arg_value>{arg-value-1}</arg_value><arg_key>{arg-key-2}</arg_key><arg_value>{arg-value-2}</arg_value>...</tool_call><|system|>You are a helpful weather assistant.<|user|>What is the weather in New York City?<|assistant|><think></think><tool_call>get_weather<arg_key>location</arg_key><arg_value>New York City, NY</arg_value></tool_call><|observation|><tool_response>{"temperature":"72°F","condition":"sunny"}</tool_response><|assistant|><think>
