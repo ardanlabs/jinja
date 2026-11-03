@@ -32,6 +32,12 @@ func TestAdjacentStringLiterals(t *testing.T) {
 		{"escapes preserved", `{{ "a\n" "b" }}`, "a\nb"},
 		{"empty strings", `{{ "" "" }}`, ""},
 		{"single empty", `{{ "" }}`, ""},
+		{"bare test argument", `{{ "ab" is eq "a" "b" }}`, "True"},
+		{"method on whole", `{{ ("a" "b").upper() }}`, "AB"},
+		{"subscript on whole", `{{ "a" "b"[1] }}`, "b"},
+		{"for iterable", `{% for c in "a" "b" %}{{ c }},{% endfor %}`, "a,b,"},
+		{"in operator", `{{ "a" in "x" "abc" }}`, "True"},
+		{"triple single with double inside", `{{ '''say "hi"''' }}`, `say "hi"`},
 		{"list items stay separate", `{{ ["a" "b", "c"] | length }}`, "2"},
 	}
 	for _, tt := range tests {

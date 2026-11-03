@@ -867,9 +867,14 @@ func (p *exprParser) parseAtom() (expr, error) {
 	if t.kind == tokString {
 		p.advance()
 		val := t.val
-		for p.peek().kind == tokString {
-			val += p.peek().val
-			p.advance()
+		if p.peek().kind == tokString {
+			var b strings.Builder
+			b.WriteString(val)
+			for p.peek().kind == tokString {
+				b.WriteString(p.peek().val)
+				p.advance()
+			}
+			val = b.String()
 		}
 		return &litExpr{val: NewString(val)}, nil
 	}
