@@ -1782,6 +1782,71 @@ func TestDeepSeekV41Primitives(t *testing.T) {
 	}
 }
 
+func TestRender_KimiK3LlamaCpp(t *testing.T) {
+	tmpl, err := jinja.Compile(chatTemplates["Kimi-K31"])
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	for _, tt := range []struct {
+		name, effort string
+		kwargs       map[string]any
+		thinking     bool
+		wantErr      bool
+	}{
+		{name: "defaults", thinking: true, effort: "max"},
+		{name: "disabled", kwargs: map[string]any{"thinking": false}},
+		{name: "low", kwargs: map[string]any{"thinking_effort": "low"}, thinking: true, effort: "low"},
+		{name: "high", kwargs: map[string]any{"thinking_effort": "high"}, thinking: true, effort: "high"},
+		{name: "max", kwargs: map[string]any{"thinking_effort": "max"}, thinking: true, effort: "max"},
+		{name: "public aliases are not native controls", kwargs: map[string]any{"enable_thinking": false, "reasoning_effort": "low"}, thinking: true, effort: "max"},
+		{name: "unsupported effort", kwargs: map[string]any{"thinking_effort": "medium"}, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := map[string]any{
+				"messages":              []map[string]any{{"role": "user", "content": "hello"}},
+				"add_generation_prompt": true,
+			}
+			maps.Copy(data, tt.kwargs)
+			got, err := tmpl.Render(data)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("render: got error %v, want error %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			tag := "response"
+			if tt.thinking {
+				tag = "think"
+			}
+			if want := "<|open|>" + tag + "<|sep|>"; !strings.HasSuffix(got, want) {
+				t.Errorf("generation prefix: got %q, want suffix %q", got, want)
+			}
+			if tt.thinking && !strings.Contains(got, "thinking_effort="+tt.effort+"`") {
+				t.Errorf("thinking effort: got %q, want %q", got, tt.effort)
+			}
+			if !tt.thinking && strings.Contains(got, `type="thinking-effort"`) {
+				t.Errorf("disabled thinking: got effort instruction in %q", got)
+			}
+		})
+	}
+
+	t.Run("tool message", func(t *testing.T) {
+		got, err := tmpl.Render(map[string]any{
+			"thinking": false, "add_generation_prompt": false,
+			"messages": []map[string]any{{"role": "assistant", "content": "", "tool_calls": []map[string]any{{
+				"function": map[string]any{"name": "ping", "arguments": map[string]any{"text": "hello"}},
+			}}}},
+		})
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		want := `<|open|>message role="assistant"<|sep|><|open|>response<|sep|><|close|>response<|sep|><|open|>tools<|sep|><|open|>call tool="ping" index="1"<|sep|><|open|>argument key="text" type="string"<|sep|>hello<|close|>argument<|sep|><|close|>call<|sep|><|close|>tools<|sep|><|close|>message<|sep|><|end_of_msg|>`
+		if got != want {
+			t.Errorf("tool message: got %q, want %q", got, want)
+		}
+	})
+}
+
 func TestRegression(t *testing.T) {
 	for name, content := range chatTemplates {
 		t.Run(name, func(t *testing.T) {
