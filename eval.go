@@ -588,16 +588,17 @@ func (e *evaluator) evalAttr(n *attrExpr) (Value, error) {
 
 	// Dict attribute access.
 	if obj.IsDict() {
-		method, err := e.dictMethod(obj, n.attr)
-		if err != nil || !method.IsUndefined() {
-			return method, err
+		d := obj.AsDict()
+		if !obj.namespace {
+			method, err := e.dictMethod(obj, n.attr)
+			if err != nil || !method.IsUndefined() {
+				return method, err
+			}
 		}
-		if v, ok := obj.AsDict().Get(n.attr); ok {
+		if v, ok := d.Get(n.attr); ok {
 			return v, nil
 		}
-
-		// Dict methods.
-		return e.dictMethod(obj, n.attr)
+		return Undefined(), nil
 	}
 
 	// String methods.
