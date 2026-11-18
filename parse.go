@@ -980,59 +980,47 @@ func applyTrimming(segs []segment) {
 
 	// Pass 1: left side of every tag.
 	for i := range segs {
+		// Whitespace control stops at the neighboring tag; it must never
+		// reach past that tag to an earlier text segment.
+		if i == 0 || segs[i-1].kind != segText {
+			continue
+		}
 		seg := &segs[i]
+		j := i - 1
 		applyDefaults := seg.kind == segStmt || seg.kind == segComment
 
 		switch {
 		case seg.trimLeft:
-			for j := i - 1; j >= 0; j-- {
-				if segs[j].kind == segText {
-					segs[j].text = trimTrailingWhitespace(segs[j].text)
-					break
-				}
-			}
+			segs[j].text = trimTrailingWhitespace(segs[j].text)
 		case applyDefaults && !seg.keepLeft:
-			for j := i - 1; j >= 0; j-- {
-				if segs[j].kind == segText {
-					// Treat the very first text segment in the
-					// template as if it were preceded by a newline
-					// (start of file == start of line) so that a
-					// template that opens with `   {% if %}...`
-					// strips the indentation, matching Jinja2.
-					isFirstText := true
-					for k := j - 1; k >= 0; k-- {
-						if segs[k].kind == segText || segs[k].kind == segExpr {
-							isFirstText = false
-							break
-						}
-					}
-					segs[j].text = lstripBlock(segs[j].text, isFirstText)
+			// Treat the very first text segment in the template as if it
+			// were preceded by a newline (start of file == start of line)
+			// so an opening `   {% if %}...` strips its indentation.
+			isFirstText := true
+			for k := j - 1; k >= 0; k-- {
+				if segs[k].kind == segText || segs[k].kind == segExpr {
+					isFirstText = false
 					break
 				}
 			}
+			segs[j].text = lstripBlock(segs[j].text, isFirstText)
 		}
 	}
 
 	// Pass 2: right side of every tag.
 	for i := range segs {
+		if i+1 == len(segs) || segs[i+1].kind != segText {
+			continue
+		}
 		seg := &segs[i]
+		j := i + 1
 		applyDefaults := seg.kind == segStmt || seg.kind == segComment
 
 		switch {
 		case seg.trimRight:
-			for j := i + 1; j < len(segs); j++ {
-				if segs[j].kind == segText {
-					segs[j].text = trimLeadingWhitespace(segs[j].text)
-					break
-				}
-			}
+			segs[j].text = trimLeadingWhitespace(segs[j].text)
 		case applyDefaults && !seg.keepRight:
-			for j := i + 1; j < len(segs); j++ {
-				if segs[j].kind == segText {
-					segs[j].text = trimBlockNewline(segs[j].text)
-					break
-				}
-			}
+			segs[j].text = trimBlockNewline(segs[j].text)
 		}
 	}
 }
