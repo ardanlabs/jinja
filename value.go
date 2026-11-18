@@ -37,6 +37,9 @@ const (
 type Value struct {
 	kind Kind
 	v    any
+
+	// Namespaces store attributes without exposing dictionary methods.
+	namespace bool
 }
 
 // Undefined returns an undefined value.

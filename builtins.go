@@ -41,7 +41,12 @@ func registerGlobals(s *scope) {
 }
 
 func builtinNamespace(args []Value, kwargs map[string]Value) (Value, error) {
-	return builtinDict(args, kwargs)
+	ns, err := builtinDict(args, kwargs)
+	if err != nil {
+		return Undefined(), err
+	}
+	ns.namespace = true
+	return ns, nil
 }
 
 func builtinRaiseException(args []Value, kwargs map[string]Value) (Value, error) {
