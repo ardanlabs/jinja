@@ -1,0 +1,30 @@
+{
+  "chat_template_kwargs": {"Inkling-2-Mini": {"reasoning_effort": 0.37}},
+  "messages": [
+    {"role": "system", "content": "Keep the original argument values."},
+    {"role": "user", "content": "Analyze the note and look up its status."},
+    {
+      "role": "assistant",
+      "content": "",
+      "reasoning_content": "I can run both tools.",
+      "tool_calls": [
+        {
+          "id": "note",
+          "type": "function",
+          "function": {
+            "name": "analyze",
+            "arguments": "{\"count\":9007199254740993,\"options\":{\"a\":[2,1],\"z\":true},\"text\":\"café & <tag>\\nnext line\"}"
+          }
+        },
+        {"id": "status", "type": "function", "function": {"name": "lookup", "arguments": {"id": 17}}}
+      ]
+    },
+    {"role": "tool", "tool_call_id": "status", "content": "Ready."},
+    {"role": "tool", "tool_call_id": "note", "content": "Analysis complete."},
+    {"role": "assistant", "name": "reporter", "content": "Both finished."}
+  ],
+  "tools": [
+    {"function": {"description": "Analyze a note.", "name": "analyze", "parameters": {"properties": {"count": {"type": "integer"}, "options": {"type": "object"}, "text": {"type": "string"}}, "type": "object"}}, "type": "function"},
+    {"function": {"description": "Look up a status.", "name": "lookup", "parameters": {"properties": {"id": {"type": "integer"}}, "type": "object"}}, "type": "function"}
+  ]
+}

@@ -144,6 +144,7 @@ The test suite compiles and renders the chat templates from these models:
 | gemma-4-26B-A4B-it                | Gemma 4            |
 | GLM-5.2                           | GLM 5              |
 | gpt-oss-20b                       | GPT-OSS            |
+| Inkling-2-Mini                    | Inkling 2          |
 | Kimi-K3                           | Kimi K3            |
 | laguna                            | Laguna             |
 | LFM2.5-VL-1.6B                    | LFM2.5             |
@@ -163,6 +164,13 @@ matched by call ID, reasoning-effort options, and built-in versus custom `bash`
 tool definitions. The unmodified upstream template is included in the
 byte-for-byte comparisons against Python Jinja2. These tests validate template
 rendering, not model inference.
+
+Inkling 2 coverage uses the unmodified template embedded in
+`ggml-org/Inkling-2-Mini-GGUF/Inkling-2-Mini-Q8_0.gguf`. It includes parallel
+tool calls and out-of-order replies matched by call ID, named assistant messages,
+reasoning-effort defaults and bounds, and image markers and unsupported audio.
+The template SHA-256 is
+`53a9035f3255945704b5857657cfb00c1165090c0641c4f782a0cbf268cc16dc`.
 
 ## Provisioning Compatibility Tests
 
