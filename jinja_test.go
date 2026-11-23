@@ -1847,6 +1847,137 @@ func TestRender_KimiK3LlamaCpp(t *testing.T) {
 	})
 }
 
+// The unmodified template is tokenizer.chat_template from
+// ggml-org/Inkling-2-Mini-GGUF/Inkling-2-Mini-Q8_0.gguf. The template SHA-256 is
+// 53a9035f3255945704b5857657cfb00c1165090c0641c4f782a0cbf268cc16dc.
+// TestRequestsAgainstTemplates also compares it against Python Jinja2.
+func TestRender_Inkling2_ToolRoundTrip(t *testing.T) {
+	tmpl, err := jinja.Compile(chatTemplates["Inkling-2-Mini"])
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	req := loadRequests(t)["kronk-req-inkling"]
+	data := buildRenderData(req)
+	data["reasoning_effort"] = 0.37
+	got, err := tmpl.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, fragment := range []string{
+		`<|message_system|>tool_declare<|content_xml|>[{"description":"Analyze a note.","name":"analyze","parameters":{"properties":{"count":{"type":"integer"},"options":{"type":"object"},"text":{"type":"string"}},"type":"object"},"type":"function"},`,
+		`<|message_system|><|content_text|>Keep the original argument values.<|end_message|><|message_system|><|content_text|>Thinking effort level: 0.37<|end_message|><|message_user|>`,
+		`<|message_model|><|content_thinking|>I can run both tools.<|end_message|><|message_model|>analyze<|content_invoke_tool_json|>{"name":"analyze","args":{"count":9007199254740993,"options":{"a":[2,1],"z":true},"text":"café & <tag>\nnext line"}}<|end_message|>`,
+		`<|message_model|>lookup<|content_invoke_tool_json|>{"name":"lookup","args":{"id":17}}<|end_message|><|content_model_end_sampling|><|message_tool|>lookup<|content_text|>Ready.<|end_message|><|message_tool|>analyze<|content_text|>Analysis complete.<|end_message|>`,
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Errorf("output missing %q", fragment)
+		}
+	}
+	if want := `<|message_model|>reporter<|content_text|>Both finished.<|end_message|><|content_model_end_sampling|>`; !strings.HasSuffix(got, want) {
+		t.Errorf("ending: got %q, want suffix %q", got, want)
+	}
+}
+
+func TestRender_Inkling2_ReasoningEffort(t *testing.T) {
+	tmpl, err := jinja.Compile(chatTemplates["Inkling-2-Mini"])
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	for _, tt := range []struct {
+		name    string
+		kwargs  map[string]any
+		want    string
+		wantErr string
+	}{
+		{name: "default", want: "0.9"},
+		{name: "null", kwargs: map[string]any{"reasoning_effort": nil}, want: "0.9"},
+		{name: "none", kwargs: map[string]any{"reasoning_effort": "none"}, want: "0"},
+		{name: "minimal", kwargs: map[string]any{"reasoning_effort": "minimal"}, want: "0.1"},
+		{name: "low", kwargs: map[string]any{"reasoning_effort": "low"}, want: "0.2"},
+		{name: "medium", kwargs: map[string]any{"reasoning_effort": "medium"}, want: "0.7"},
+		{name: "high with whitespace", kwargs: map[string]any{"reasoning_effort": " high "}, want: "0.9"},
+		{name: "xhigh", kwargs: map[string]any{"reasoning_effort": "xhigh"}, want: "0.99"},
+		{name: "max", kwargs: map[string]any{"reasoning_effort": "max"}, want: "0.99"},
+		{name: "numeric zero", kwargs: map[string]any{"reasoning_effort": 0.0}, want: "0"},
+		{name: "numeric upper bound", kwargs: map[string]any{"reasoning_effort": 0.99}, want: "0.99"},
+		{name: "below lower bound", kwargs: map[string]any{"reasoning_effort": -0.01}, wantErr: "reasoning_effort must be in [0.0, 0.99]"},
+		{name: "above upper bound", kwargs: map[string]any{"reasoning_effort": 1.0}, wantErr: "reasoning_effort must be in [0.0, 0.99]"},
+		{name: "unknown", kwargs: map[string]any{"reasoning_effort": "extreme"}, wantErr: "Unknown reasoning_effort: extreme"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := map[string]any{
+				"messages": []map[string]any{
+					{"role": "system", "content": "System."},
+					{"role": "user", "content": "Hello."},
+				},
+				"add_generation_prompt": true,
+			}
+			maps.Copy(data, tt.kwargs)
+			// Reusing the compiled template must not retain effort_emitted.
+			for range 2 {
+				got, err := tmpl.Render(data)
+				if tt.wantErr != "" {
+					if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+						t.Fatalf("render: got %v, want error containing %q", err, tt.wantErr)
+					}
+					continue
+				}
+				if err != nil {
+					t.Fatalf("render: %v", err)
+				}
+				want := "<|message_system|><|content_text|>System.<|end_message|><|message_system|><|content_text|>Thinking effort level: " + tt.want + "<|end_message|><|message_user|><|content_text|>Hello.<|end_message|>"
+				if got != want {
+					t.Errorf("output: got %q, want %q", got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRender_Inkling2_Media(t *testing.T) {
+	tmpl, err := jinja.Compile(chatTemplates["Inkling-2-Mini"])
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	for _, tt := range []struct {
+		name, role, part string
+		wantErr          string
+	}{
+		{name: "user image", role: "user", part: "image_url"},
+		{name: "tool image", role: "tool", part: "input_image"},
+		{name: "assistant image", role: "assistant", part: "image", wantErr: "Image content is only supported for user and tool messages"},
+		{name: "audio", role: "user", part: "input_audio", wantErr: "Inkling 2 does not accept audio input"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tmpl.Render(map[string]any{
+				"reasoning_effort": "none",
+				"messages": []map[string]any{{"role": tt.role, "content": []any{
+					map[string]any{"type": "text", "text": "Before."},
+					map[string]any{"type": tt.part},
+					map[string]any{"type": "input_text", "text": "After."},
+				}}},
+			})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("render: got %v, want error containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			role := "<|message_" + tt.role + "|>"
+			want := "<|message_system|><|content_text|>Thinking effort level: 0<|end_message|>" +
+				role + "<|content_text|>Before.<|end_message|>" +
+				role + "<|content_image|><|unused_200054|><|end_message|>" +
+				role + "<|content_text|>After.<|end_message|>"
+			if got != want {
+				t.Errorf("output: got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestRegression(t *testing.T) {
 	for name, content := range chatTemplates {
 		t.Run(name, func(t *testing.T) {
